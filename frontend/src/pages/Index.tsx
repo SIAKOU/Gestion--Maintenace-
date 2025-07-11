@@ -12,13 +12,14 @@ const Index = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  /*au cas ou vous etes deja une fois connecter 
+    useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       setIsLoggedIn(true);
       navigate('/dashboard');
     }
-  }, [navigate]);
+  }, [navigate]);*/
 
   const features = [
     {
@@ -96,10 +97,7 @@ const Index = () => {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button onClick={handleLogin} size="lg" className="btn-primary text-lg px-8 py-3">
-                Commencer maintenant
-              </Button>
-              <Button variant="outline" size="lg" className="text-lg px-8 py-3">
-                Voir la démo
+                Commencer maintenant 😌😌
               </Button>
             </div>
           </div>
@@ -213,10 +211,10 @@ const Index = () => {
             <div>
               <h4 className="font-semibold mb-4">Contact</h4>
               <ul className="space-y-2 text-gray-400">
-                <li>support@maintenancepro.com</li>
-                <li>+33 1 23 45 67 89</li>
+                <li>SIAKOU2006@gmail.com</li>
+                <li>(+228) 92 10 47 81 / 79 50 99 45 </li>
                 <li>123 Rue de l'Industrie</li>
-                <li>75001 Paris, France</li>
+                <li>KATAGAN Lomé , TOGO </li>
               </ul>
             </div>
           </div>

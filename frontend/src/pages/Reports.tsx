@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { Plus, Search, Filter, FileText, Calendar, Clock, User } from 'lucide-react';
+import { Plus, Search, Filter, FileText, Calendar, Clock, User, Terminal } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,59 +7,81 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Textarea } from '@/components/ui/textarea';
+
+// Types pour les réponses API
+type Report = {
+  id: number;
+  title: string;
+  machine: { id: number; name: string };
+  technician: { firstName: string; lastName: string };
+  priority: string;
+  status: string;
+  workDate: string;
+  duration: number;
+  workType: string;
+  // Autres champs si nécessaires
+};
+
+type ReportsResponse = { reports: Report[] };
+
+type Machine = { id: number; name: string };
+type MachinesResponse = { machines: Machine[] };
 
 const Reports = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [filterStatus, setFilterStatus] = useState('all');
   const [showNewReportModal, setShowNewReportModal] = useState(false);
 
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const queryClient = useQueryClient();
 
-  // Données de démonstration
-  const reports = [
-    {
-      id: 1,
-      title: "Maintenance préventive - Compresseur A1",
-      machine: "Compresseur A1",
-      technician: "Marie Dubois",
-      workDate: "2024-01-10",
-      duration: 120,
-      status: "submitted",
-      priority: "medium",
-      workType: "maintenance"
-    },
-    {
-      id: 2,
-      title: "Réparation pompe hydraulique B2",
-      machine: "Pompe B2",
-      technician: "Jean Martin",
-      workDate: "2024-01-09",
-      duration: 180,
-      status: "approved",
-      priority: "high",
-      workType: "repair"
-    },
-    {
-      id: 3,
-      title: "Inspection moteur principal C3",
-      machine: "Moteur C3",
-      technician: "Pierre Leroy",
-      workDate: "2024-01-08",
-      duration: 60,
-      status: "draft",
-      priority: "low",
-      workType: "inspection"
+  // Correction : typage de la query
+  const { data, isLoading, error } = useQuery<ReportsResponse>({
+    queryKey: ['reports', filterStatus, debouncedSearchTerm],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filterStatus !== 'all') {
+        params.append('status', filterStatus);
+      }
+      if (debouncedSearchTerm) {
+        params.append('search', debouncedSearchTerm);
+      }
+      return api.get(`reports?${params.toString()}`);
     }
-  ];
+  });
 
-  const machines = [
-    { id: 1, name: "Compresseur A1" },
-    { id: 2, name: "Pompe B2" },
-    { id: 3, name: "Moteur C3" },
-    { id: 4, name: "Turbine T1" },
-    { id: 5, name: "Générateur G2" }
-  ];
+  // Correction : typage de la mutation
+  const createReportMutation = useMutation({
+    mutationFn: (newReport: Record<string, FormDataEntryValue>) => api.post('reports', newReport),
+    onSuccess: () => {
+      // Correction : utilisation de l'objet pour invalidateQueries
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      setShowNewReportModal(false);
+    },
+  });
+
+  const handleCreateReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const newReport = Object.fromEntries(formData.entries());
+    createReportMutation.mutate(newReport);
+  };
+
+  // Correction : typage du retour de la query
+  const reports = data?.reports || [];
+
+  // Correction : typage de la query machines
+  const { data: machinesData } = useQuery<MachinesResponse>({
+    queryKey: ['machines'],
+    queryFn: () => api.get('machines')
+  });
+  const machines = machinesData?.machines || [];
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -103,18 +124,7 @@ const Reports = () => {
     }
   };
 
-  const filteredReports = reports.filter(report => {
-    const matchesSearch = report.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         report.machine.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || report.status === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
-
-  const handleCreateReport = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Ici on ajouterait la logique pour créer un nouveau rapport
-    setShowNewReportModal(false);
-  };
+  const filteredReports = reports;
 
   return (
     <div className="space-y-6">
@@ -143,13 +153,14 @@ const Reports = () => {
                   <Label htmlFor="title">Titre du rapport</Label>
                   <Input
                     id="title"
+                    name="title"
                     placeholder="Ex: Maintenance préventive..."
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="machine">Machine</Label>
-                  <Select required>
+                  <Label htmlFor="machineId">Machine</Label>
+                  <Select name="machineId" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner une machine" />
                     </SelectTrigger>
@@ -169,6 +180,7 @@ const Reports = () => {
                   <Label htmlFor="workDate">Date de travail</Label>
                   <Input
                     id="workDate"
+                    name="workDate"
                     type="date"
                     required
                   />
@@ -177,6 +189,7 @@ const Reports = () => {
                   <Label htmlFor="startTime">Heure de début</Label>
                   <Input
                     id="startTime"
+                    name="startTime"
                     type="time"
                     required
                   />
@@ -185,6 +198,7 @@ const Reports = () => {
                   <Label htmlFor="endTime">Heure de fin</Label>
                   <Input
                     id="endTime"
+                    name="endTime"
                     type="time"
                     required
                   />
@@ -194,7 +208,7 @@ const Reports = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="workType">Type de travail</Label>
-                  <Select required>
+                  <Select name="workType" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner le type" />
                     </SelectTrigger>
@@ -209,7 +223,7 @@ const Reports = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="priority">Priorité</Label>
-                  <Select required>
+                  <Select name="priority" required>
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner la priorité" />
                     </SelectTrigger>
@@ -227,6 +241,7 @@ const Reports = () => {
                 <Label htmlFor="problemDescription">Description du problème</Label>
                 <Textarea
                   id="problemDescription"
+                  name="problemDescription"
                   placeholder="Décrivez le problème rencontré..."
                   required
                   rows={3}
@@ -237,6 +252,7 @@ const Reports = () => {
                 <Label htmlFor="actionsTaken">Actions effectuées</Label>
                 <Textarea
                   id="actionsTaken"
+                  name="actionsTaken"
                   placeholder="Décrivez les actions prises pour résoudre le problème..."
                   required
                   rows={3}
@@ -247,6 +263,7 @@ const Reports = () => {
                 <Label htmlFor="observations">Observations</Label>
                 <Textarea
                   id="observations"
+                  name="observations"
                   placeholder="Observations additionnelles..."
                   rows={2}
                 />
@@ -256,6 +273,7 @@ const Reports = () => {
                 <Label htmlFor="recommendations">Recommandations</Label>
                 <Textarea
                   id="recommendations"
+                  name="recommendations"
                   placeholder="Recommandations pour éviter le problème..."
                   rows={2}
                 />
@@ -310,75 +328,99 @@ const Reports = () => {
 
       {/* Reports List */}
       <div className="grid grid-cols-1 gap-6">
-        {filteredReports.map((report) => (
-          <Card key={report.id} className="maintenance-card">
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <CardTitle className="flex items-center space-x-2">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                    <span>{report.title}</span>
-                  </CardTitle>
-                  <CardDescription className="mt-2">
-                    Machine: {report.machine} • Technicien: {report.technician}
-                  </CardDescription>
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-6 w-3/4" />
+                <Skeleton className="h-4 w-1/2 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-20" />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Badge className={getPriorityColor(report.priority)}>
-                    {report.priority}
-                  </Badge>
-                  <Badge className={getStatusColor(report.status)}>
-                    {getStatusLabel(report.status)}
-                  </Badge>
+              </CardContent>
+            </Card>
+          ))
+        ) : error ? (
+          <Alert variant="destructive">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle>Erreur</AlertTitle>
+            <AlertDescription>
+              Impossible de charger les rapports. Veuillez réessayer plus tard.
+            </AlertDescription>
+          </Alert>
+        ) : filteredReports.length > 0 ? (
+          filteredReports.map((report) => (
+            <Card key={report.id} className="maintenance-card">
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <CardTitle className="flex items-center space-x-2">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <span>{report.title}</span>
+                    </CardTitle>
+                    <CardDescription className="mt-2">
+                      Machine: {report.machine.name} • Technicien: {report.technician.firstName} {report.technician.lastName}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge className={getPriorityColor(report.priority)}>
+                      {report.priority}
+                    </Badge>
+                    <Badge className={getStatusColor(report.status)}>
+                      {getStatusLabel(report.status)}
+                    </Badge>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <span>{report.workDate}</span>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <span>{new Date(report.workDate).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="h-4 w-4 text-gray-400" />
+                    <span>{report.duration}min</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <span>{getWorkTypeLabel(report.workType)}</span>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm">
+                      Voir détails
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-gray-400" />
-                  <span>{report.duration}min</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <User className="h-4 w-4 text-gray-400" />
-                  <span>{getWorkTypeLabel(report.workType)}</span>
-                </div>
-                <div className="flex justify-end">
-                  <Button variant="outline" size="sm">
-                    Voir détails
-                  </Button>
-                </div>
-              </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <Card>
+            <CardContent className="text-center py-12">
+              <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Aucun rapport trouvé
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {searchTerm || filterStatus !== 'all' 
+                  ? "Aucun rapport ne correspond à vos critères de recherche."
+                  : "Commencez par créer votre premier rapport de dépannage."
+                }
+              </p>
+              {!searchTerm && filterStatus === 'all' && (
+                <Button onClick={() => setShowNewReportModal(true)} className="btn-primary">
+                  Créer un rapport
+                </Button>
+              )}
             </CardContent>
           </Card>
-        ))}
+        )}
       </div>
-
-      {filteredReports.length === 0 && (
-        <Card>
-          <CardContent className="text-center py-12">
-            <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Aucun rapport trouvé
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {searchTerm || filterStatus !== 'all' 
-                ? "Aucun rapport ne correspond à vos critères de recherche."
-                : "Commencez par créer votre premier rapport de dépannage."
-              }
-            </p>
-            {!searchTerm && filterStatus === 'all' && (
-              <Button onClick={() => setShowNewReportModal(true)} className="btn-primary">
-                Créer un rapport
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };

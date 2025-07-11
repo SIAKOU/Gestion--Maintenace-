@@ -1,11 +1,13 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Plus, Search, Users as UsersIcon, Shield, Wrench, Building } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '@/hooks/useDebounce';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import CreateUserModal from '@/components/users/CreateUserModal';
 
@@ -22,71 +24,47 @@ interface User {
   updatedAt: string;
 }
 
+interface UsersResponse {
+  users: User[];
+}
+
 const Users = () => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+  // Typage correct pour la query
+  const { data, isLoading, error } = useQuery<UsersResponse>({
+    queryKey: ['users', debouncedSearchTerm],
+    queryFn: () => api.get(`users?search=${debouncedSearchTerm}`),
+  });
 
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des utilisateurs');
-      }
+  const users = data?.users || [];
 
-      const data = await response.json();
-      setUsers(data.users);
-    } catch (error: any) {
-      toast({
-        title: "Erreur",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleUserStatus = async (userId: number) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/users/${userId}/toggle-status`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Erreur lors du changement de statut');
-      }
-
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: (userId: number) => api.patch(`users/${userId}/toggle-status`, {}),
+    onSuccess: () => {
+      // Correction : invalidation avec objet
+      queryClient.invalidateQueries({ queryKey: ['users'] });
       toast({
         title: "Statut modifié",
         description: "Le statut de l'utilisateur a été modifié avec succès.",
       });
-
-      fetchUsers(); // Recharger la liste
-    } catch (error: any) {
+    },
+    onError: () => {
       toast({
         title: "Erreur",
-        description: error.message,
+        description: "Erreur lors du changement de statut",
         variant: "destructive",
       });
     }
-  };
+  });
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+  const handleToggleUserStatus = (userId: number) => {
+    toggleUserStatusMutation.mutate(userId);
+  };
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -116,8 +94,8 @@ const Users = () => {
   };
 
   const filteredUsers = users.filter(user =>
-    `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    `${user.firstName ?? ''} ${user.lastName ?? ''}`.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+    user.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
   );
 
   const roleCounts = {
@@ -128,10 +106,18 @@ const Users = () => {
     total: users.length
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-lg">Chargement des utilisateurs...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-red-500">Erreur lors du chargement des utilisateurs</div>
       </div>
     );
   }
@@ -250,7 +236,7 @@ const Users = () => {
                 <div className="flex items-center space-x-3">
                   <Avatar>
                     <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
-                      {user.firstName[0]}{user.lastName[0]}
+                      {(user.firstName?.[0] ?? '') + (user.lastName?.[0] ?? '')}
                     </AvatarFallback>
                   </Avatar>
                   <div>
@@ -305,7 +291,7 @@ const Users = () => {
                     size="sm" 
                     variant={user.isActive ? "destructive" : "default"}
                     className={user.isActive ? "" : "btn-primary"}
-                    onClick={() => toggleUserStatus(user.id)}
+                    onClick={() => handleToggleUserStatus(user.id)}
                   >
                     {user.isActive ? "Désactiver" : "Activer"}
                   </Button>
@@ -320,7 +306,7 @@ const Users = () => {
       <CreateUserModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onUserCreated={fetchUsers}
+        onUserCreated={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
       />
     </div>
   );
