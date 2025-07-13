@@ -1,5 +1,6 @@
 
-const { Report, Machine, User, FileAttachment } = require('../models');
+const { Report, Machine, User, FileAttachment, Sequelize } = require('../models');
+const { Op } = Sequelize;
 const Joi = require('joi');
 
 const reportSchema = Joi.object({
@@ -48,7 +49,8 @@ const createReport = async (req, res) => {
     const reportWithRelations = await Report.findByPk(report.id, {
       include: [
         { model: Machine, as: 'machine' },
-        { model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName'] }
+        { model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName'] },
+        { model: User, as: 'reviewer', attributes: ['id', 'firstName', 'lastName'] }
       ]
     });
 
@@ -61,7 +63,7 @@ const createReport = async (req, res) => {
 
 const getReports = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, machineId, technicianId, workDate } = req.query;
+    const { page = 1, limit = 10, status, machineId, technicianId, workDate, search } = req.query;
     const offset = (page - 1) * limit;
 
     const where = {};
@@ -69,6 +71,10 @@ const getReports = async (req, res) => {
     if (status) where.status = status;
     if (machineId) where.machineId = machineId;
     if (workDate) where.workDate = workDate;
+
+    if (search) {
+      where.title = { [Op.iLike]: `%${search}%` };
+    }
     
     // Les techniciens voient seulement leurs rapports
     if (req.user.role === 'technician') {
@@ -82,6 +88,7 @@ const getReports = async (req, res) => {
       include: [
         { model: Machine, as: 'machine' },
         { model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName'] },
+        { model: User, as: 'reviewer', attributes: ['id', 'firstName', 'lastName'] },
         { model: FileAttachment, as: 'attachments' }
       ],
       order: [['workDate', 'DESC'], ['createdAt', 'DESC']],
@@ -110,6 +117,7 @@ const getReport = async (req, res) => {
       include: [
         { model: Machine, as: 'machine' },
         { model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName'] },
+        { model: User, as: 'reviewer', attributes: ['id', 'firstName', 'lastName'] },
         { model: FileAttachment, as: 'attachments' }
       ]
     });

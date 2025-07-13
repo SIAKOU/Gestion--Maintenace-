@@ -1,14 +1,18 @@
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import {
-  TrendingUp,
-  TrendingDown,
+  Wrench,
+  CheckCircle,
   Clock,
   AlertTriangle,
-  CheckCircle,
-  Wrench,
   Building2,
   Users,
   Calendar,
+  FileText,
+  AlertCircle as AlertErrorIcon,
+  PlusCircle,
+  ListTodo,
 } from "lucide-react";
 import {
   Card,
@@ -19,333 +23,481 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { api, Report, Machine } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
+// --- TYPES ---
+type DashboardData = {
+  stats: {
+    interventionsToday: number;
+    operationalMachinesPercentage: number;
+    avgResolutionTime: string;
+    urgentInterventions: number;
+  };
+  recentInterventions: Report[];
+  upcomingMaintenance: Machine[];
+};
+
+// --- FONCTION D'APPEL API (ROBUSTE) ---
+const getDashboardData = async (): Promise<DashboardData> => {
+  let recentInterventions: Report[] = [];
+  let upcomingMaintenance: Machine[] = [];
+  let allMachines: Machine[] = [];
+
+  try {
+    const [interventionsResponse, upcomingMaintResponse, allMachinesResponse] =
+      await Promise.all([
+        api.get<any>("reports?limit=3&sortBy=createdAt:desc").catch(() => null),
+        api
+          .get<any>(
+            "machines?limit=3&sortBy=nextMaintenanceDate:asc&status=operational"
+          )
+          .catch(() => null),
+        api.get<any>("machines").catch(() => null),
+      ]);
+
+    if (interventionsResponse)
+      recentInterventions = Array.isArray(interventionsResponse)
+        ? interventionsResponse
+        : interventionsResponse?.reports || [];
+    if (upcomingMaintResponse)
+      upcomingMaintenance = Array.isArray(upcomingMaintResponse)
+        ? upcomingMaintResponse
+        : upcomingMaintResponse?.machines || [];
+    if (allMachinesResponse)
+      allMachines = Array.isArray(allMachinesResponse)
+        ? allMachinesResponse
+        : allMachinesResponse?.machines || [];
+  } catch (error) {
+    console.error(
+      "Erreur lors de la récupération des données du dashboard:",
+      error
+    );
+  }
+
+  const totalMachines = allMachines.length;
+  const operationalMachines = allMachines.filter(
+    (m) => m.status === "operational"
+  ).length;
+  const operationalMachinesPercentage =
+    totalMachines > 0
+      ? Math.round((operationalMachines / totalMachines) * 100)
+      : 100;
+
+  const stats = {
+    interventionsToday: recentInterventions.length,
+    operationalMachinesPercentage: operationalMachinesPercentage,
+    avgResolutionTime: "N/A",
+    urgentInterventions: recentInterventions.filter(
+      (r) => r.priority === "critical"
+    ).length,
+  };
+
+  return { stats, recentInterventions, upcomingMaintenance };
+};
+
+// --- COMPOSANT PRINCIPAL ---
 const Dashboard = () => {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const navigate = useNavigate();
 
-  // Demo stats
-  const stats = [
-    {
-      title: "Interventions aujourd'hui",
-      value: "12",
-      change: "+2",
-      trend: "up",
-      icon: <Wrench className="h-6 w-6 text-blue-600" />,
-      color: "blue",
-    },
-    {
-      title: "Machines opérationnelles",
-      value: "87%",
-      change: "+5%",
-      trend: "up",
-      icon: <CheckCircle className="h-6 w-6 text-green-600" />,
-      color: "green",
-    },
-    {
-      title: "Temps moyen de résolution",
-      value: "2.3h",
-      change: "-0.5h",
-      trend: "down",
-      icon: <Clock className="h-6 w-6 text-orange-600" />,
-      color: "orange",
-    },
-    {
-      title: "Interventions urgentes",
-      value: "3",
-      change: "-1",
-      trend: "down",
-      icon: <AlertTriangle className="h-6 w-6 text-red-600" />,
-      color: "red",
-    },
-  ];
+  const {
+    data,
+    isLoading: isDashboardLoading,
+    error,
+  } = useQuery({
+    queryKey: ["dashboardData"],
+    queryFn: getDashboardData,
+    enabled: !!user,
+  });
 
-  const recentInterventions = [
-    {
-      id: 1,
-      title: "Maintenance préventive - Compresseur A1",
-      machine: "Compresseur A1",
-      technician: "Marie Dubois",
-      status: "in_progress",
-      priority: "medium",
-      time: "10:30",
-    },
-    {
-      id: 2,
-      title: "Réparation pompe hydraulique",
-      machine: "Pompe B2",
-      technician: "Jean Martin",
-      status: "completed",
-      priority: "high",
-      time: "09:15",
-    },
-    {
-      id: 3,
-      title: "Diagnostic moteur principal",
-      machine: "Moteur C3",
-      technician: "Pierre Leroy",
-      status: "pending",
-      priority: "critical",
-      time: "08:45",
-    },
-  ];
-
-  const upcomingMaintenance = [
-    { machine: "Turbine T1", date: "2024-01-15", type: "Préventive" },
-    { machine: "Générateur G2", date: "2024-01-16", type: "Inspection" },
-    { machine: "Compresseur A3", date: "2024-01-17", type: "Révision" },
-  ];
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "En attente";
-      case "in_progress":
-        return "En cours";
-      case "completed":
-        return "Terminé";
-      default:
-        return status;
-    }
+  // --- AMÉLIORATION : Fonction pour la salutation dynamique ---
+  const getGreeting = () => {
+    const currentHour = new Date().getHours();
+    if (currentHour < 12) return "Bonjour";
+    if (currentHour < 18) return "Bon après-midi";
+    return "Bonsoir";
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "in_progress":
-        return "bg-blue-100 text-blue-800";
-      case "completed":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
+  const isLoading = isAuthLoading || isDashboardLoading;
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "low":
-        return "bg-green-100 text-green-800";
-      case "medium":
-        return "bg-yellow-100 text-yellow-800";
-      case "high":
-        return "bg-orange-100 text-orange-800";
-      case "critical":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
+  if (isLoading) {
+    return (
+      <div className="space-y-8">
+        <HeaderSkeleton />
+        <DashboardSkeleton />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertErrorIcon className="h-4 w-4" />
+        <AlertTitle>Erreur de chargement</AlertTitle>
+        <AlertDescription>
+          Impossible de charger les données. {(error as Error).message}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const safeData = data || {
+    stats: {
+      interventionsToday: 0,
+      operationalMachinesPercentage: 100,
+      avgResolutionTime: "N/A",
+      urgentInterventions: 0,
+    },
+    recentInterventions: [],
+    upcomingMaintenance: [],
   };
 
   return (
-    <div className="space-y-6 px-2 pb-10 md:px-6 lg:px-12 xl:px-32 max-w-screen-2xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6">
+    <div className="space-y-8">
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-            Bonjour, <span className="uppercase">{user.firstName}</span> 👋
+          {/* --- AMÉLIORATION : Utilisation de la salutation et du nom complet --- */}
+          <h1 className="text-3xl font-bold text-gray-900">
+            {getGreeting()}, {user?.firstName } 👋
           </h1>
-          <p className="text-gray-500 text-base md:text-lg">
-            Voici un aperçu de votre activité maintenance aujourd'hui
+          <p className="text-gray-500 mt-1">
+            Voici un aperçu de votre activité maintenance.
           </p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full md:w-auto">
+        <div className="flex gap-3 w-full sm:w-auto">
           <Button
             variant="outline"
-            className="w-full md:w-auto flex items-center space-x-2"
+            className="w-full sm:w-auto"
+            onClick={() => navigate("/planning")}
           >
-            <Calendar className="h-5 w-5" />
-            <span>Planifier</span>
+            <Calendar className="h-4 w-4 mr-2" />
+            Planifier
           </Button>
-          <Button className="btn-primary w-full md:w-auto flex items-center space-x-2">
-            <Wrench className="h-5 w-5" />
-            <span>Nouvelle intervention</span>
+          <Button
+            className="w-full sm:w-auto"
+            onClick={() => navigate("/reports/new")}
+          >
+            <Wrench className="h-4 w-4 mr-2" />
+            Nouv. Intervention
           </Button>
         </div>
-      </div>
+      </header>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-        {stats.map((stat, index) => (
-          <Card
-            key={index}
-            className="maintenance-card shadow-none border border-gray-100"
-          >
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-500">
-                    {stat.title}
-                  </p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">
-                    {stat.value}
-                  </p>
-                  <div className="flex items-center mt-2">
-                    {stat.trend === "up" ? (
-                      <TrendingUp className="h-4 w-4 text-green-600 mr-1" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-600 mr-1" />
-                    )}
-                    <span
-                      className={`text-sm font-medium ${
-                        stat.trend === "up" ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {stat.change}
-                    </span>
-                    <span className="text-xs text-gray-400 ml-1">vs hier</span>
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-3 rounded-xl flex items-center justify-center">
-                  {stat.icon}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Main Content */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-        {/* Interventions récentes */}
-        <Card className="maintenance-card border border-gray-100 shadow-none">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2 text-lg">
-              <Wrench className="h-5 w-5 text-blue-600" />
-              <span>Interventions récentes</span>
-            </CardTitle>
-            <CardDescription>
-              Dernières activités de maintenance
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentInterventions.map((intervention) => (
-                <div
-                  key={intervention.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg group hover:bg-blue-50 transition"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium text-gray-900 truncate">
-                      {intervention.title}
-                    </h4>
-                    <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-600">
-                      <span className="flex items-center">
-                        <Building2 className="h-4 w-4 mr-1" />
-                        <span className="truncate">{intervention.machine}</span>
-                      </span>
-                      <span className="flex items-center">
-                        <Users className="h-4 w-4 mr-1" />
-                        <span>{intervention.technician}</span>
-                      </span>
-                      <span>{intervention.time}</span>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 ml-4 min-w-max">
-                    <Badge className={getPriorityColor(intervention.priority)}>
-                      {intervention.priority}
-                    </Badge>
-                    <Badge className={getStatusColor(intervention.status)}>
-                      {getStatusLabel(intervention.status)}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" className="w-full mt-5">
-              Voir toutes les interventions
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Maintenance programmée */}
-        <Card className="maintenance-card border border-gray-100 shadow-none">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2 text-lg">
-              <Calendar className="h-5 w-5 text-green-600" />
-              <span>Maintenance programmée</span>
-            </CardTitle>
-            <CardDescription>
-              Prochaines interventions planifiées
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {upcomingMaintenance.map((maintenance, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg group hover:bg-green-50 transition"
-                >
-                  <div>
-                    <h4 className="font-medium text-gray-900">
-                      {maintenance.machine}
-                    </h4>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {maintenance.type}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      {maintenance.date}
-                    </p>
-                    <Badge variant="outline" className="mt-1">
-                      Programmé
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Button variant="outline" className="w-full mt-5">
-              Voir le planning complet
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
-      <Card className="maintenance-card border border-gray-100 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-lg">Actions rapides</CardTitle>
-          <CardDescription>
-            Accès rapide aux fonctionnalités principales
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center space-y-2 text-blue-700 border-blue-100 hover:border-blue-400"
-            >
-              <Wrench className="h-7 w-7 text-blue-600" />
-              <span className="text-sm font-semibold">
-                Nouvelle intervention
-              </span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center space-y-2 text-green-700 border-green-100 hover:border-green-400"
-            >
-              <Building2 className="h-7 w-7 text-green-600" />
-              <span className="text-sm font-semibold">Ajouter machine</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center space-y-2 text-purple-700 border-purple-100 hover:border-purple-400"
-            >
-              <Users className="h-7 w-7 text-purple-600" />
-              <span className="text-sm font-semibold">Gérer équipe</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center space-y-2 text-orange-700 border-orange-100 hover:border-orange-400"
-            >
-              <TrendingUp className="h-7 w-7 text-orange-600" />
-              <span className="text-sm font-semibold">Voir rapports</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <StatsSection stats={safeData.stats} />
+      <MainContentSection
+        recentInterventions={safeData.recentInterventions}
+        upcomingMaintenance={safeData.upcomingMaintenance}
+      />
+      <QuickActionsSection />
     </div>
   );
 };
+
+// --- SOUS-COMPOSANTS (inchangés, ils sont déjà robustes) ---
+
+const StatsSection = ({ stats }: { stats: DashboardData["stats"] }) => (
+  <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+    <StatCard
+      title="Interventions récentes"
+      value={stats.interventionsToday}
+      icon={<Wrench className="h-6 w-6 text-blue-600" />}
+    />
+    <StatCard
+      title="Machines opérationnelles"
+      value={`${stats.operationalMachinesPercentage}%`}
+      icon={<CheckCircle className="h-6 w-6 text-green-600" />}
+    />
+    <StatCard
+      title="Temps moyen de résolution"
+      value={stats.avgResolutionTime}
+      icon={<Clock className="h-6 w-6 text-orange-600" />}
+    />
+    <StatCard
+      title="Interventions urgentes"
+      value={stats.urgentInterventions}
+      icon={<AlertTriangle className="h-6 w-6 text-red-600" />}
+    />
+  </section>
+);
+
+const MainContentSection = ({
+  recentInterventions,
+  upcomingMaintenance,
+}: {
+  recentInterventions: Report[];
+  upcomingMaintenance: Machine[];
+}) => (
+  <section className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+    <RecentInterventionsCard interventions={recentInterventions} />
+    <UpcomingMaintenanceCard maintenances={upcomingMaintenance} />
+  </section>
+);
+
+const QuickActionsSection = () => {
+  const navigate = useNavigate();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Actions rapides</CardTitle>
+        <CardDescription>
+          Accès direct aux fonctionnalités principales.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <QuickActionButton
+            onClick={() => navigate("/reports/new")}
+            icon={<Wrench className="h-7 w-7 text-blue-600" />}
+            label="Nouv. Intervention"
+          />
+          <QuickActionButton
+            onClick={() => navigate("/machines")}
+            icon={<Building2 className="h-7 w-7 text-green-600" />}
+            label="Gérer les Machines"
+          />
+          <QuickActionButton
+            onClick={() => navigate("/users")}
+            icon={<Users className="h-7 w-7 text-purple-600" />}
+            label="Gérer l'Équipe"
+          />
+          <QuickActionButton
+            onClick={() => navigate("/reports")}
+            icon={<FileText className="h-7 w-7 text-orange-600" />}
+            label="Voir les Rapports"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const StatCard = ({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+}) => (
+  <Card>
+    <CardContent className="p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        </div>
+        <div className="bg-slate-100 p-3 rounded-lg">{icon}</div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+const RecentInterventionsCard = ({
+  interventions,
+}: {
+  interventions: Report[];
+}) => {
+  const navigate = useNavigate();
+  const getStatusLabel = (s: string) =>
+    ({ pending: "En attente", in_progress: "En cours", completed: "Terminé" }[
+      s
+    ] || s);
+  const getStatusColor = (s: string) =>
+    ({
+      pending: "bg-yellow-100 text-yellow-800",
+      in_progress: "bg-blue-100 text-blue-800",
+      completed: "bg-green-100 text-green-800",
+    }[s] || "bg-gray-100");
+  const getPriorityColor = (p: string) =>
+    ({
+      low: "text-green-800",
+      medium: "text-yellow-800",
+      high: "text-orange-800",
+      critical: "text-red-800",
+    }[p] || "text-gray-800");
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wrench className="h-5 w-5 text-blue-600" />
+          Interventions récentes
+        </CardTitle>
+        <CardDescription>Dernières activités de maintenance.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {interventions.length > 0 ? (
+          <div className="space-y-3">
+            {interventions.map((i) => (
+              <div
+                key={i.id}
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-800 truncate">
+                    {i.title}
+                  </p>
+                  <div className="flex items-center gap-x-4 mt-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="h-3 w-3" />
+                      {i.machine?.name || "N/A"}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Users className="h-3 w-3" />
+                      {i.technician?.firstName || "N/A"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 ml-4">
+                  <Badge
+                    variant="secondary"
+                    className={`capitalize ${getPriorityColor(
+                      i.priority
+                    )} bg-opacity-20`}
+                  >
+                    {i.priority}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className={getStatusColor(i.status)}
+                  >
+                    {getStatusLabel(i.status)}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-10">
+            <ListTodo className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              Aucune intervention récente
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Créez une nouvelle intervention pour commencer.
+            </p>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          className="w-full mt-4"
+          onClick={() => navigate("/reports")}
+        >
+          Voir toutes les interventions
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+const UpcomingMaintenanceCard = ({
+  maintenances,
+}: {
+  maintenances: Machine[];
+}) => {
+  const navigate = useNavigate();
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-green-600" />
+          Maintenance à venir
+        </CardTitle>
+        <CardDescription>Prochaines interventions planifiées.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {maintenances.length > 0 ? (
+          <div className="space-y-3">
+            {maintenances.map((m) => (
+              <div
+                key={m.id}
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+              >
+                <div>
+                  <p className="font-medium text-gray-800">{m.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Réf: {m.reference}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">
+                    {m.nextMaintenanceDate
+                      ? new Date(m.nextMaintenanceDate).toLocaleDateString()
+                      : "N/A"}
+                  </p>
+                  <Badge variant="outline" className="mt-1">
+                    Programmé
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-10">
+            <PlusCircle className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              Aucune maintenance programmée
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Planifiez une nouvelle maintenance.
+            </p>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          className="w-full mt-4"
+          onClick={() => navigate("/planning")}
+        >
+          Voir le planning complet
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+const QuickActionButton = ({
+  onClick,
+  icon,
+  label,
+}: {
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) => (
+  <Button variant="outline" className="h-28 flex-col gap-2" onClick={onClick}>
+    {icon}
+    <span className="text-sm font-medium text-center">{label}</span>
+  </Button>
+);
+const HeaderSkeleton = () => (
+  <header className="flex justify-between items-center">
+    <div className="space-y-2">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-5 w-72" />
+    </div>
+    <div className="flex gap-3">
+      <Skeleton className="h-10 w-28" />
+      <Skeleton className="h-10 w-44" />
+    </div>
+  </header>
+);
+const DashboardSkeleton = () => (
+  <div className="space-y-8 animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+      <Skeleton className="h-24" />
+    </div>
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <Skeleton className="h-80" />
+      <Skeleton className="h-80" />
+    </div>
+    <Skeleton className="h-48" />
+  </div>
+);
 
 export default Dashboard;

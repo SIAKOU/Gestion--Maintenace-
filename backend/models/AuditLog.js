@@ -1,44 +1,52 @@
-
 module.exports = (sequelize, DataTypes) => {
-  const AuditLog = sequelize.define('AuditLog', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
+  const AuditLog = sequelize.define(
+    "AuditLog",
+    {
+      id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+      },
+      userId: {
+        field: "user_id",
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "users",
+          key: "id",
+        },
+      },
+      action: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      entity: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+      },
+      entityId: {
+        field: "entity_id",
+        type: DataTypes.INTEGER,
+      },
+      changes: {
+        type: DataTypes.JSONB,
+      },
+      ipAddress: {
+        field: "ip_address",
+        type: DataTypes.STRING(45),
+      },
+      userAgent: {
+        field: "user_agent",
+        type: DataTypes.TEXT,
+      },
     },
-    userId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id'
-      }
-    },
-    action: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    entity: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    entityId: {
-      type: DataTypes.INTEGER
-    },
-    changes: {
-      type: DataTypes.JSON
-    },
-    ipAddress: {
-      type: DataTypes.STRING
-    },
-    userAgent: {
-      type: DataTypes.STRING
+    {
+      tableName: "audit_logs",
+      underscored: true,
+      timestamps: true,
+      updatedAt: false, // car ton DDL n'a pas de updated_at pour audit_logs
     }
-  }, {
-    tableName: 'audit_logs',
-    timestamps: true,
-    updatedAt: false
-  });
+  );
 
   return AuditLog;
 };

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
   FileText,
@@ -8,23 +8,54 @@ import {
   Building2,
   LogOut,
   Menu,
-  X,
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 
+// --- TYPES ---
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+// --- COMPOSANT PRINCIPAL ---
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="h-screen flex overflow-hidden bg-gray-100">
+      {/* Sidebar (fixe sur desktop, coulissante sur mobile) */}
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+
+      {/* Contenu principal qui aura le défilement */}
+      <div className="flex flex-col w-0 flex-1 overflow-hidden">
+        {/* Header visible uniquement sur mobile */}
+        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+
+        <main className="flex-1 relative z-0 overflow-y-auto focus:outline-none">
+          {/* Le padding est maintenant ici pour englober toute la zone de défilement */}
+          <div className="py-6 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-7xl mx-auto">{children}</div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+// --- SOUS-COMPOSANTS POUR LA LISIBILITÉ ---
+
+const Sidebar = ({
+  sidebarOpen,
+  setSidebarOpen,
+}: {
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   const navigation = [
@@ -40,169 +71,161 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    toast({
-      title: "Déconnexion réussie",
-      description: "À bientôt !",
-    });
+    toast({ title: "Déconnexion réussie", description: "À bientôt !" });
     navigate("/");
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "Administrateur";
-      case "technician":
-        return "Technicien";
-      case "administration":
-        return "Administration";
-      default:
-        return role;
-    }
-  };
-
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case "admin":
-        return "bg-red-100 text-red-800";
-      case "technician":
-        return "bg-blue-100 text-blue-800";
-      case "administration":
-        return "bg-green-100 text-green-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Overlay for mobile sidebar */}
+    <>
+      {/* Overlay pour mobile */}
       <div
-        className={`fixed inset-0 z-40 bg-black bg-opacity-40 transition-opacity lg:hidden ${
+        className={`fixed inset-0 z-30 bg-black/50 lg:hidden ${
           sidebarOpen ? "block" : "hidden"
         }`}
         onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
       />
-      {/* Sidebar */}
+
+      {/* Contenu de la Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
         lg:translate-x-0 lg:static lg:inset-0`}
-        aria-label="Sidebar"
       >
-        {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Wrench className="h-6 w-6 text-white" />
-            </div>
-            <h1 className="text-lg font-bold text-gray-900">MaintenancePro</h1>
-          </div>
-          <button
-            className="lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close Sidebar"
-          >
-            <X className="h-6 w-6 text-gray-400" />
-          </button>
-        </div>
-
-        {/* User Info */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
-            <Avatar>
-              <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
-                {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {user.firstName} {user.lastName}
-              </p>
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
-                  user.role
-                )}`}
-              >
-                {getRoleLabel(user.role)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="mt-6 px-3 flex-1">
-          <div className="space-y-1">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.name}
-                  onClick={() => {
-                    navigate(item.href);
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200
-                    ${
-                      isActive
-                        ? "bg-blue-100 text-blue-700 border-r-2 border-blue-700"
-                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                >
-                  <Icon className="mr-3 h-5 w-5" />
-                  {item.name}
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* Logout Button */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-gray-200">
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-gray-700 hover:bg-red-50 hover:text-red-600"
-            onClick={handleLogout}
-          >
-            <LogOut className="mr-3 h-5 w-5" />
-            Déconnexion
-          </Button>
-        </div>
+        <SidebarHeader />
+        <UserInfo user={user} />
+        <NavigationMenu
+          navigation={navigation}
+          location={location}
+          onNavigate={(href) => {
+            navigate(href);
+            setSidebarOpen(false);
+          }}
+        />
+        <LogoutButton onLogout={handleLogout} />
       </aside>
+    </>
+  );
+};
 
-      {/* Main Content */}
-      <div className="flex-1 lg:pl-64 flex flex-col">
-        {/* Topbar for mobile */}
-        <header className="bg-white shadow-sm border-b border-gray-200 lg:hidden">
-          <div className="flex items-center justify-between h-16 px-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="text-gray-400 hover:text-gray-600"
-              aria-label="Open Sidebar"
-            >
-              <Menu className="h-6 w-6" />
-            </button>
-            <div className="flex items-center space-x-3">
-              <div className="bg-blue-600 p-2 rounded-lg">
-                <Wrench className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-lg font-bold text-gray-900">
-                MaintenancePro
-              </span>
-            </div>
-          </div>
-        </header>
+const SidebarHeader = () => (
+  <div className="flex items-center h-16 px-6 border-b border-gray-200 flex-shrink-0">
+    <Link to="/dashboard" className="flex items-center space-x-3">
+      <div className="bg-blue-600 p-2 rounded-lg">
+        <Wrench className="h-6 w-6 text-white" />
+      </div>
+      <h1 className="text-lg font-bold text-gray-900">MaintenancePro</h1>
+    </Link>
+  </div>
+);
 
-        {/* Responsive page content */}
-        <main className="flex-1 p-2 md:p-6 xl:p-10 bg-gray-50">
-          <div className="animate-fade-in max-w-screen-2xl mx-auto w-full">
-            {children}
-          </div>
-        </main>
+const UserInfo = ({
+  user,
+}: {
+  user: { firstName?: string; lastName?: string; role: string };
+}) => {
+  const getRoleLabel = (role: string) =>
+    ({
+      admin: "Administrateur",
+      technician: "Technicien",
+      administration: "Administration",
+    }[role] || role);
+  const getRoleColor = (role: string) =>
+    ({
+      admin: "bg-red-100 text-red-800",
+      technician: "bg-blue-100 text-blue-800",
+      administration: "bg-green-100 text-green-800",
+    }[role] || "bg-gray-100 text-gray-800");
+
+  return (
+    <div className="p-6 border-b border-gray-200">
+      <div className="flex items-center space-x-3">
+        <Avatar>
+          <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
+            {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 truncate">
+            {user.firstName} {user.lastName}
+          </p>
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
+              user.role
+            )}`}
+          >
+            {getRoleLabel(user.role)}
+          </span>
+        </div>
       </div>
     </div>
   );
 };
+
+const NavigationMenu = ({
+  navigation,
+  location,
+  onNavigate,
+}: {
+  navigation: any[];
+  location: unknown;
+  onNavigate: (href: string) => void;
+}) => (
+  <nav className="mt-6 px-3 flex-1">
+    <div className="space-y-1">
+      {navigation.map((item) => {
+        const isActive = (location as Location).pathname.startsWith(item.href);
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.name}
+            onClick={() => onNavigate(item.href)}
+            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+              isActive
+                ? "bg-blue-50 text-blue-700 font-semibold"
+                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            }`}
+          >
+            <Icon className="mr-3 h-5 w-5" />
+            {item.name}
+          </button>
+        );
+      })}
+    </div>
+  </nav>
+);
+
+const LogoutButton = ({ onLogout }: { onLogout: () => void }) => (
+  <div className="p-3 border-t border-gray-200 flex-shrink-0">
+    <Button
+      variant="ghost"
+      className="w-full justify-start text-gray-700 hover:bg-red-50 hover:text-red-600"
+      onClick={onLogout}
+    >
+      <LogOut className="mr-3 h-5 w-5" />
+      Déconnexion
+    </Button>
+  </div>
+);
+
+const MobileHeader = ({ onMenuClick }: { onMenuClick: () => void }) => (
+  <div className="relative z-10 flex-shrink-0 flex h-16 bg-white shadow lg:hidden">
+    <button
+      onClick={onMenuClick}
+      className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+    >
+      <span className="sr-only">Ouvrir la sidebar</span>
+      <Menu className="h-6 w-6" />
+    </button>
+    <div className="flex-1 px-4 flex justify-center">
+      <Link to="/dashboard" className="flex items-center space-x-3">
+        <div className="bg-blue-600 p-2 rounded-lg">
+          <Wrench className="h-5 w-5 text-white" />
+        </div>
+        <span className="text-lg font-bold text-gray-900">MaintenancePro</span>
+      </Link>
+    </div>
+  </div>
+);
 
 export default Layout;

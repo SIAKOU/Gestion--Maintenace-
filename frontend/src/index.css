@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,40 +6,45 @@
 @layer base {
   :root {
     /* Palette principale - bleus professionnels */
-    --primary: 210 100% 45%; /* Bleu corporate */
+    --primary: 210 100% 45%;
+    /* Bleu corporate */
     --primary-foreground: 0 0% 98%;
     --primary-dark: 210 100% 35%;
     --primary-light: 210 100% 55%;
-    
+
     /* Couleurs secondaires */
     --secondary: 210 16% 93%;
     --secondary-foreground: 210 15% 20%;
-    
+
     /* Couleurs d'état pour maintenance */
-    --success: 142 76% 36%; /* Vert maintenance OK */
-    --warning: 43 96% 56%; /* Orange maintenance préventive */
-    --danger: 0 84% 60%; /* Rouge panne/urgence */
-    --info: 199 89% 48%; /* Bleu information */
-    
+    --success: 142 76% 36%;
+    /* Vert maintenance OK */
+    --warning: 43 96% 56%;
+    /* Orange maintenance préventive */
+    --danger: 0 84% 60%;
+    /* Rouge panne/urgence */
+    --info: 199 89% 48%;
+    /* Bleu information */
+
     /* Couleurs de fond et texte */
     --background: 0 0% 100%;
     --foreground: 210 15% 15%;
     --muted: 210 40% 96%;
     --muted-foreground: 210 15% 50%;
-    
+
     /* Couleurs des cartes et bordures */
     --card: 0 0% 100%;
     --card-foreground: 210 15% 15%;
     --border: 210 20% 88%;
     --input: 210 20% 88%;
     --ring: 210 100% 45%;
-    
+
     /* Couleurs spécifiques maintenance */
     --maintenance: 142 76% 36%;
     --breakdown: 0 84% 60%;
     --operational: 142 76% 36%;
     --pending: 43 96% 56%;
-    
+
     --radius: 8px;
   }
 }
@@ -50,63 +54,63 @@
   .maintenance-card {
     @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200;
   }
-  
+
   .status-badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
-  
+
   .status-operational {
     @apply bg-green-100 text-green-800;
   }
-  
+
   .status-maintenance {
     @apply bg-yellow-100 text-yellow-800;
   }
-  
+
   .status-breakdown {
     @apply bg-red-100 text-red-800;
   }
-  
+
   .status-pending {
     @apply bg-blue-100 text-blue-800;
   }
-  
+
   .priority-low {
     @apply text-green-600 bg-green-50;
   }
-  
+
   .priority-medium {
     @apply text-yellow-600 bg-yellow-50;
   }
-  
+
   .priority-high {
     @apply text-orange-600 bg-orange-50;
   }
-  
+
   .priority-critical {
     @apply text-red-600 bg-red-50;
   }
-  
+
   .btn-primary {
     @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
   }
-  
+
   .btn-secondary {
     @apply bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2 px-4 rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2;
   }
-  
+
   .form-input {
     @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500;
   }
-  
+
   .sidebar-link {
     @apply flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200;
   }
-  
+
   .sidebar-link-active {
     @apply bg-blue-100 text-blue-700 border-r-2 border-blue-700;
   }
-  
+
   .sidebar-link-inactive {
     @apply text-gray-700 hover:bg-gray-100 hover:text-gray-900;
   }
@@ -117,27 +121,29 @@
   .animate-fade-in {
     animation: fadeIn 0.3s ease-in-out;
   }
-  
+
   .animate-slide-in {
     animation: slideIn 0.4s ease-out;
   }
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
       transform: translateY(10px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
-  
+
   @keyframes slideIn {
     from {
       opacity: 0;
       transform: translateX(-20px);
     }
+
     to {
       opacity: 1;
       transform: translateX(0);
@@ -185,8 +191,32 @@
   .maintenance-card {
     @apply p-4;
   }
-  
-  .btn-primary, .btn-secondary {
+
+  .btn-primary,
+  .btn-secondary {
     @apply text-sm py-1.5 px-3;
   }
+}
+
+@keyframes gradient-shine {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient-shine {
+  animation: gradient-shine 8s ease infinite;
+  background-size: 200% 200%;
+}
+
+.perspective-1000 {
+  perspective: 1000px;
 }

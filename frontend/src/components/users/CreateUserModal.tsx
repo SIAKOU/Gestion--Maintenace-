@@ -81,8 +81,8 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
       let errorMessage = "Erreur lors de la création";
       if (typeof error === "object" && error !== null && "details" in error) {
         const details = (error as ApiError).details;
-        if (details && typeof details === "object" && "error" in details) {
-          errorMessage = (details as any).error || errorMessage;
+        if (details && typeof details === "object" && "error" in details && typeof details.error === 'string') {
+          errorMessage = details.error || errorMessage;
         }
       }
       toast({
