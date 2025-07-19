@@ -8,13 +8,14 @@ const {
   updateReport,
   submitReport
 } = require('../controllers/reportController');
+const { uploadReportFiles, processUploadedFiles } = require('../middleware/upload');
 
 const router = express.Router();
 
 // Toutes les routes nécessitent une authentification
 router.use(authenticateToken);
 
-router.post('/', authorize('technician'), createReport);
+router.post('/', authorize('technician'), uploadReportFiles, processUploadedFiles, createReport);
 router.get('/', getReports);
 router.get('/:id', getReport);
 router.put('/:id', updateReport);

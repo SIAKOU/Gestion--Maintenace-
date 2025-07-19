@@ -10,7 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       userId: {
         field: "user_id",
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true, // Permettre null pour les opérations système
         references: {
           model: "users",
           key: "id",
@@ -38,6 +38,11 @@ module.exports = (sequelize, DataTypes) => {
       userAgent: {
         field: "user_agent",
         type: DataTypes.TEXT,
+      },
+      metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: "Données supplémentaires pour l'audit",
       },
     },
     {

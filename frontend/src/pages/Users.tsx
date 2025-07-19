@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "@/hooks/useDebounce";
 import { api } from "@/lib/api";
@@ -26,6 +26,8 @@ import { useToast } from "@/hooks/use-toast";
 import CreateUserModal from "@/components/users/CreateUserModal";
 import EditUserModal from "@/components/users/EditUserModal";
 import type { EditUserFormData } from "@/components/users/EditUserModal";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { getImageUrl } from '@/lib/api';
 
 interface User {
   id: number;
@@ -38,6 +40,7 @@ interface User {
   lastLogin?: string;
   createdAt: string;
   updatedAt: string;
+  avatar?: string; // Added avatar field
 }
 
 interface UsersResponse {
@@ -205,6 +208,8 @@ const Users = () => {
     );
   }
 
+
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -300,8 +305,13 @@ const Users = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <Avatar>
-                    <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage 
+                      src={getImageUrl(user.avatar)} 
+                      alt={`${user.firstName} ${user.lastName}`}
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold text-lg">
                       {(user.firstName?.[0] ?? "") + (user.lastName?.[0] ?? "")}
                     </AvatarFallback>
                   </Avatar>
@@ -407,4 +417,10 @@ const Users = () => {
   );
 };
 
-export default Users;
+export default function UsersProtected() {
+  return (
+    <ProtectedRoute requiredRole="admin">
+      <Users />
+    </ProtectedRoute>
+  );
+}

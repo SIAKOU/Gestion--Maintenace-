@@ -60,6 +60,17 @@ module.exports = (sequelize, DataTypes) => {
         field: "last_login",
         type: DataTypes.DATE,
       },
+      loginIp: {
+        field: "login_ip",
+        type: DataTypes.STRING(45),
+        allowNull: true,
+        comment: "Dernière adresse IP de connexion",
+      },
+      avatar: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: "Chemin de la photo de profil utilisateur",
+      },
     },
     {
       tableName: "users",

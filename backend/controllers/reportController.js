@@ -1,7 +1,9 @@
 
-const { Report, Machine, User, FileAttachment, Sequelize } = require('../models');
+const { Report, Machine, User, FileAttachment, AuditLog, Sequelize } = require('../models');
 const { Op } = Sequelize;
 const Joi = require('joi');
+const logger = require("../logger");
+const { deleteFile, getPublicUrl } = require("../middleware/upload");
 
 const reportSchema = Joi.object({
   title: Joi.string().min(5).max(200).required(),
@@ -29,34 +31,52 @@ const createReport = async (req, res) => {
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }
-
     // Calculer la durée en minutes
     const startTime = new Date(`1970-01-01T${req.body.startTime}:00`);
     const endTime = new Date(`1970-01-01T${req.body.endTime}:00`);
     const duration = Math.round((endTime - startTime) / (1000 * 60));
-
     if (duration <= 0) {
       return res.status(400).json({ error: 'L\'heure de fin doit être après l\'heure de début' });
     }
-
     const report = await Report.create({
       ...req.body,
       duration,
       technicianId: req.user.id,
       status: 'draft'
     });
-
+    // Gérer l'upload de plusieurs fichiers
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const filePath = getPublicUrl(file.path);
+        const category = file.mimetype.startsWith('image/') ? 'image' : 
+                        file.mimetype.startsWith('video/') ? 'video' : 
+                        file.mimetype.startsWith('audio/') ? 'audio' : 'document';
+        
+        await FileAttachment.create({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          category: category,
+          fileType: 'report',
+          reportId: report.id,
+          uploadedBy: req.user.id,
+          description: `Fichier attaché au rapport: ${req.body.title}`
+        });
+      }
+    }
     const reportWithRelations = await Report.findByPk(report.id, {
       include: [
         { model: Machine, as: 'machine' },
         { model: User, as: 'technician', attributes: ['id', 'firstName', 'lastName'] },
-        { model: User, as: 'reviewer', attributes: ['id', 'firstName', 'lastName'] }
+        { model: User, as: 'reviewer', attributes: ['id', 'firstName', 'lastName'] },
+        { model: FileAttachment, as: 'attachments' }
       ]
     });
-
     res.status(201).json(reportWithRelations);
   } catch (error) {
-    console.error('Erreur création rapport:', error);
+    logger.error('Erreur création rapport:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
@@ -73,7 +93,7 @@ const getReports = async (req, res) => {
     if (workDate) where.workDate = workDate;
 
     if (search) {
-      where.title = { [Op.iLike]: `%${search}%` };
+      where.title = { [Op.ilike]: `%${search}%` };
     }
     
     // Les techniciens voient seulement leurs rapports
@@ -106,7 +126,7 @@ const getReports = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Erreur récupération rapports:', error);
+    logger.error('Erreur récupération rapports:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
@@ -133,7 +153,7 @@ const getReport = async (req, res) => {
 
     res.json(report);
   } catch (error) {
-    console.error('Erreur récupération rapport:', error);
+    logger.error('Erreur récupération rapport:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
@@ -181,7 +201,7 @@ const updateReport = async (req, res) => {
 
     res.json(updatedReport);
   } catch (error) {
-    console.error('Erreur mise à jour rapport:', error);
+    logger.error('Erreur mise à jour rapport:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
@@ -214,7 +234,7 @@ const submitReport = async (req, res) => {
 
     res.json(updatedReport);
   } catch (error) {
-    console.error('Erreur soumission rapport:', error);
+    logger.error('Erreur soumission rapport:', error);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };

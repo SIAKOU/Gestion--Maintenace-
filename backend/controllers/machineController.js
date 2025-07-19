@@ -1,6 +1,9 @@
 // controllers/machineController.js
-const { Machine } = require("../models");
+const { Machine, FileAttachment, AuditLog } = require("../models");
 const Joi = require("joi");
+const logger = require("../logger");
+const path = require("path");
+const { deleteFile, getPublicUrl } = require("../middleware/upload");
 
 // --- CORRECTION : Schéma de validation aligné sur le modèle Sequelize ---
 // On ne garde que les champs que le frontend envoie et que le modèle peut accepter.
@@ -20,31 +23,98 @@ const createMachineSchema = Joi.object({
   // On ne valide pas les dates ici car elles sont souvent gérées par le backend ou optionnelles
 });
 
-// ... (votre fonction getMachines)
 const getMachines = async (req, res) => {
-  /* ... */
+  try {
+    // Recherche avec filtres éventuels
+    const { status, search } = req.query;
+    const where = {};
+    if (status && status !== 'all') where.status = status;
+    if (search) {
+      where.name = { [require('sequelize').Op.ilike]: `%${search}%` };
+    }
+    const machines = await Machine.findAll({
+      where,
+      order: [['createdAt', 'DESC']],
+    });
+    res.json({ machines });
+  } catch (error) {
+    logger.error('Erreur récupération machines:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
 };
 
 const createMachine = async (req, res) => {
   try {
-    const { error } = createMachineSchema.validate(req.body);
+    let data = req.body;
+    let imagePath = null;
+
+    // Gérer l'upload d'image
+    if (req.file) {
+      imagePath = getPublicUrl(req.file.path);
+      
+      // Créer l'enregistrement FileAttachment
+      await FileAttachment.create({
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        path: req.file.path,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        category: 'image',
+        fileType: 'machine',
+        machineId: null, // Sera mis à jour après création de la machine
+        uploadedBy: req.user.id,
+        description: `Image pour la machine ${data.name}`
+      });
+    }
+
+    const { error } = createMachineSchema.validate(data);
     if (error) {
-      // On renvoie un message d'erreur clair au frontend
       return res.status(400).json({ message: error.details[0].message });
     }
 
-    // On ne crée la machine qu'avec les données validées
-    const newMachine = await Machine.create(req.body);
+    const newMachine = await Machine.create({
+      ...data,
+      image: imagePath
+    });
+
+    // Mettre à jour le FileAttachment avec l'ID de la machine
+    if (req.file) {
+      await FileAttachment.update(
+        { machineId: newMachine.id },
+        { 
+          where: { 
+            filename: req.file.filename,
+            fileType: 'machine',
+            machineId: null
+          }
+        }
+      );
+    }
+
+    // Log de création
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        action: "CREATE",
+        entity: "Machine",
+        entityId: newMachine.id,
+        details: `Machine créée: ${newMachine.name} (${newMachine.reference})`,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      });
+    } catch (auditError) {
+      logger.warn("Erreur lors de la création du log d'audit:", auditError);
+      // Ne pas faire échouer la création pour un problème d'audit
+    }
+
     res.status(201).json(newMachine);
   } catch (error) {
-    console.error("Erreur création machine:", error);
+    logger.error("Erreur création machine:", error);
     if (error.name === "SequelizeUniqueConstraintError") {
-      return res
-        .status(409)
-        .json({
-          message:
-            "Une machine avec cette référence ou ce numéro de série existe déjà.",
-        });
+      return res.status(409).json({
+        message:
+          "Une machine avec cette référence ou ce numéro de série existe déjà.",
+      });
     }
     res.status(500).json({ message: "Erreur serveur interne." });
   }

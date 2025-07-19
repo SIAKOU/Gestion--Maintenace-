@@ -30,6 +30,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { User as ApiUser } from "@/lib/api";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useRef, useState } from "react";
+import { getImageUrl } from '@/lib/api';
 
 // Schéma de validation pour le formulaire de modification
 const editUserSchema = z.object({
@@ -70,6 +73,10 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
     },
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | undefined>(user?.avatar);
+
   // Ce `useEffect` est crucial. Il met à jour le formulaire chaque fois
   // que l'utilisateur sélectionné change (quand la modale s'ouvre).
   useEffect(() => {
@@ -85,11 +92,32 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
   }, [user, form]);
 
   const onSubmit: SubmitHandler<EditUserFormData> = (data) => {
-    onUpdate(data);
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value) formData.append(key, value as string);
+    });
+    if (avatarFile) formData.append("avatar", avatarFile);
+    onUpdate(formData as any);
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+  const handleRemoveAvatar = async () => {
+    // Appeler l'API pour supprimer l'avatar (DELETE /api/users/:id/avatar)
+    if (!user) return;
+    await fetch(`/api/users/${user.id}/avatar`, { method: "DELETE", credentials: "include" });
+    setAvatarFile(null);
+    setAvatarPreview(undefined);
   };
 
   // Ne rien rendre si aucun utilisateur n'est sélectionné
   if (!user) return null;
+
+  const BACKEND_URL = 'http://localhost:5000';
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -105,6 +133,29 @@ const EditUserModal: React.FC<EditUserModalProps> = ({
             onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-4 py-4"
           >
+            <div className="flex flex-col items-center gap-2 pb-2">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={getImageUrl(avatarPreview)} />
+                <AvatarFallback>{user.firstName?.[0] || "?"}{user.lastName?.[0] || "?"}</AvatarFallback>
+              </Avatar>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  Changer la photo
+                </Button>
+                <Button type="button" variant="outline" onClick={handleRemoveAvatar}>
+                  Supprimer
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  name="avatar"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}

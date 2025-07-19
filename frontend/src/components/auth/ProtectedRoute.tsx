@@ -1,25 +1,30 @@
 
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'technician' | 'administration';
+  requiredRole?: 'admin' | 'technician' | 'administration' | Array<'admin' | 'technician' | 'administration'>;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, requiredRole }) => {
   const location = useLocation();
-  const token = localStorage.getItem('token');
-  const user = localStorage.getItem('user');
+  const { user, isAuthenticated } = useAuth();
 
-  if (!token || !user) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/" state={{ from: location }} replace />;
   }
 
   if (requiredRole) {
-    const userData = JSON.parse(user);
-    if (userData.role !== requiredRole) {
-      return <Navigate to="/dashboard" replace />;
+    if (Array.isArray(requiredRole)) {
+      if (!requiredRole.includes(user.role)) {
+        return <Navigate to="/dashboard" replace />;
+      }
+    } else {
+      if (user.role !== requiredRole) {
+        return <Navigate to="/dashboard" replace />;
+      }
     }
   }
 

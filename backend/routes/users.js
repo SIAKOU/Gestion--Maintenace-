@@ -4,18 +4,21 @@ const {
   getAllUsers, 
   createUser, 
   updateUser, 
-  toggleUserStatus 
+  toggleUserStatus,
+  deleteAvatar
 } = require('../controllers/userController');
 const { authenticateToken, authorize } = require('../middleware/auth');
+const { uploadAvatar, processUploadedFiles, handleUploadError } = require('../middleware/upload');
 
 
 const router = express.Router();
 
 // Routes protégées - accessible seulement aux admins
 router.get('/', authenticateToken, authorize('admin'), getAllUsers);
-router.post('/', authenticateToken, authorize('admin'), createUser);
-router.put('/:id', authenticateToken, authorize('admin'), updateUser);
+router.post('/', authenticateToken, authorize('admin'), uploadAvatar, handleUploadError, processUploadedFiles, createUser);
+router.put('/:id', authenticateToken, authorize('admin'), uploadAvatar, handleUploadError, processUploadedFiles, updateUser);
 router.patch('/:id/toggle-status', authenticateToken, authorize('admin'), toggleUserStatus);
+router.delete('/:id/avatar', authenticateToken, authorize('admin', 'technician', 'administration'), deleteAvatar);
 
 
 module.exports = router;

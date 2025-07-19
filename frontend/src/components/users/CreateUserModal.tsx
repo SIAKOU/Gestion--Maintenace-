@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
 
 const createUserSchema = z.object({
   firstName: z
@@ -105,8 +106,45 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
     },
   });
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+
   const onSubmit = (data: CreateUserForm) => {
-    mutation.mutate(data);
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      if (value) formData.append(key, value as string);
+    });
+    if (avatarFile) formData.append("avatar", avatarFile);
+    mutation.mutate(formData as any);
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validation du fichier
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Type de fichier non autorisé",
+          description: "Veuillez sélectionner une image (JPEG, PNG, WebP)",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (file.size > maxSize) {
+        toast({
+          title: "Fichier trop volumineux",
+          description: "La taille maximale est de 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setAvatarFile(file);
+    }
   };
 
   const getRoleLabel = (role: string) => {
@@ -228,6 +266,37 @@ const CreateUserModal: React.FC<CreateUserModalProps> = ({
                 </FormItem>
               )}
             />
+            <div className="space-y-2">
+              <FormLabel>Photo de profil (optionnel)</FormLabel>
+              <div className="flex items-center space-x-4">
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  name="avatar"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleAvatarChange}
+                  className="flex-1"
+                />
+                {avatarFile && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAvatarFile(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                  >
+                    Supprimer
+                  </Button>
+                )}
+              </div>
+              {avatarFile && (
+                <div className="text-sm text-gray-500">
+                  Fichier sélectionné: {avatarFile.name} ({(avatarFile.size / 1024 / 1024).toFixed(2)} MB)
+                </div>
+              )}
+            </div>
             <div className="flex justify-end space-x-2 pt-4">
               <Button type="button" variant="outline" onClick={onClose}>
                 Annuler

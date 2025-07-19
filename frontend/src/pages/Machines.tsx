@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { keepPreviousData } from "@tanstack/react-query"; // **CORRECTION 1: Importation pour la v5**
 import {
@@ -45,6 +45,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { api, Machine as ApiMachine } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // Types locaux
 type Machine = ApiMachine & {
@@ -66,6 +67,17 @@ const Machines = () => {
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [filterStatus, setFilterStatus] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  // --- Ajout du modal de détails de machine ---
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedMachine, setSelectedMachine] = useState<Machine | null>(null);
+  const handleShowDetails = (machine: Machine) => {
+    setSelectedMachine(machine);
+    setIsDetailModalOpen(true);
+  };
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
 
@@ -107,8 +119,49 @@ const Machines = () => {
   const handleCreateMachine = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
+    if (imageFile) {
+      formData.append("image", imageFile);
+    }
     const newMachine = Object.fromEntries(formData.entries());
-    createMachineMutation.mutate(newMachine as any);
+    createMachineMutation.mutate(formData as any); // On envoie le FormData directement
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    
+    if (file) {
+      // Validation du fichier
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Type de fichier non autorisé",
+          description: "Veuillez sélectionner une image (JPEG, PNG, WebP)",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      if (file.size > maxSize) {
+        toast({
+          title: "Fichier trop volumineux",
+          description: "La taille maximale est de 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImagePreview(ev.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setImageFile(null);
+      setImagePreview(null);
+    }
   };
 
   // --- CORRECTION 4: S'assurer que les données par défaut sont correctes ---
@@ -170,6 +223,7 @@ const Machines = () => {
             <form
               onSubmit={handleCreateMachine}
               className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4"
+              encType="multipart/form-data"
             >
               <div className="space-y-2">
                 <Label htmlFor="name">Nom</Label>
@@ -226,6 +280,27 @@ const Machines = () => {
               <div className="md:col-span-2 space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea id="description" name="description" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="image">Photo de la machine (optionnel)</Label>
+                <Input
+                  ref={fileInputRef}
+                  id="image"
+                  name="image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                />
+                {imagePreview && (
+                  <div className="mt-2">
+                    <span className="block text-xs text-gray-500 mb-1">Aperçu :</span>
+                    <img
+                      src={imagePreview}
+                      alt="Aperçu de la machine"
+                      className="h-24 w-24 object-cover rounded border"
+                    />
+                  </div>
+                )}
               </div>
               <DialogFooter className="md:col-span-2">
                 <DialogClose asChild>
@@ -344,7 +419,30 @@ const Machines = () => {
         ) : machines.length > 0 ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {machines.map((machine) => (
-              <MachineCard key={machine.id} machine={machine} />
+              <Card key={machine.id}>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={machine.image} />
+                      <AvatarFallback>{machine.name?.[0] || "?"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <CardTitle>{machine.name}</CardTitle>
+                      <CardDescription>{machine.reference}</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-2">
+                    <div>Statut : {machine.status}</div>
+                    <div>Localisation : {machine.location}</div>
+                    <div>Département : {machine.department}</div>
+                    <Button variant="outline" size="sm" onClick={() => handleShowDetails(machine)}>
+                      Voir détails
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         ) : (
@@ -359,6 +457,11 @@ const Machines = () => {
           </Card>
         )}
       </div>
+      <MachineDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        machine={selectedMachine}
+      />
     </div>
   );
 };
@@ -395,7 +498,7 @@ const StatCard = ({
       <CardContent className="p-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className={`text-2xl font-bold ${valueColor}`}>{value}</p>
+          <div className={`text-2xl font-bold ${valueColor}`}>{value}</div>
         </div>
         <div className={`p-2 rounded-lg ${iconBgColor || ""}`}>{icon}</div>
       </CardContent>
@@ -438,6 +541,18 @@ const MachineCard = ({ machine }: { machine: Machine }) => {
               {machine.reference} • {machine.brand} {machine.model}
             </CardDescription>
           </div>
+          {machine.image && (
+            <Avatar className="h-12 w-12 flex-shrink-0">
+              <AvatarImage 
+                src={getImageUrl(machine.image)} 
+                alt={machine.name}
+                className="object-cover"
+              />
+              <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
+                {machine.name?.[0] || "?"}
+              </AvatarFallback>
+            </Avatar>
+          )}
           <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
             <Badge className={getPriorityColor(machine.priority)}>
               {machine.priority}
@@ -456,27 +571,27 @@ const MachineCard = ({ machine }: { machine: Machine }) => {
         <div className="border-t pt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           <div>
             <span className="text-gray-500">Département:</span>
-            <p className="font-medium">{machine.department}</p>
+            <div className="font-medium">{machine.department}</div>
           </div>
           <div>
             <span className="text-gray-500">Interventions:</span>
-            <p className="font-medium">{machine.interventionsCount || "N/A"}</p>
+            <div className="font-medium">{machine.interventionsCount || "N/A"}</div>
           </div>
           <div>
             <span className="text-gray-500">Dernière maint.:</span>
-            <p className="font-medium">
+            <div className="font-medium">
               {machine.lastMaintenanceDate
                 ? new Date(machine.lastMaintenanceDate).toLocaleDateString()
                 : "N/A"}
-            </p>
+            </div>
           </div>
           <div>
             <span className="text-gray-500">Prochaine maint.:</span>
-            <p className="font-medium">
+            <div className="font-medium">
               {machine.nextMaintenanceDate
                 ? new Date(machine.nextMaintenanceDate).toLocaleDateString()
                 : "N/A"}
-            </p>
+            </div>
           </div>
         </div>
         <div className="flex justify-end space-x-2 pt-2">
@@ -519,5 +634,47 @@ const MachineCardSkeleton = () => (
     </CardContent>
   </Card>
 );
+
+// --- Modal de détails de machine ---
+const MachineDetailModal = ({ isOpen, onClose, machine }: { isOpen: boolean; onClose: () => void; machine: Machine | null }) => {
+  if (!machine) return null;
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Détails de la machine</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col items-center gap-4">
+          <Avatar className="h-32 w-32">
+            <AvatarImage 
+              src={getImageUrl(machine.image)} 
+              alt={machine.name}
+              className="object-cover"
+            />
+            <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold text-2xl">
+              {machine.name?.[0] || "?"}
+            </AvatarFallback>
+          </Avatar>
+          <div className="w-full space-y-2">
+            <div><b>Nom :</b> {machine.name}</div>
+            <div><b>Référence :</b> {machine.reference}</div>
+            <div><b>Marque :</b> {machine.brand}</div>
+            <div><b>Modèle :</b> {machine.model}</div>
+            <div><b>Numéro de série :</b> {machine.serialNumber}</div>
+            <div><b>Localisation :</b> {machine.location}</div>
+            <div><b>Département :</b> {machine.department}</div>
+            <div><b>Description :</b> {machine.description}</div>
+            <div><b>Date d'installation :</b> {machine.installationDate}</div>
+            <div><b>Fin de garantie :</b> {machine.warrantyEndDate}</div>
+            <div><b>Statut :</b> {machine.status}</div>
+            <div><b>Priorité :</b> {machine.priority}</div>
+            <div><b>Dernière maintenance :</b> {machine.lastMaintenanceDate}</div>
+            <div><b>Prochaine maintenance :</b> {machine.nextMaintenanceDate}</div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 export default Machines;

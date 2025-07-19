@@ -67,6 +67,8 @@ import { api, Report as ApiReport, Machine as ApiMachine } from "@/lib/api";
 import Papa from "papaparse";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import * as XLSX from "xlsx";
+import { getImageUrl } from '@/lib/api';
 
 // --- TYPES & SCHÉMAS ---
 type Report = ApiReport;
@@ -164,6 +166,69 @@ const Reports = () => {
     }
   };
 
+  // --- Ajout des boutons d'export ---
+  const handleExportPDF = () => {
+    const dataToExport = reports.filter((r) => selectedReports.has(r.id));
+    if (dataToExport.length === 0) {
+      toast({ title: "Aucune sélection", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Exportation en cours..." });
+    const doc = new jsPDF();
+    doc.text("Rapports de Maintenance", 14, 16);
+    (doc as any).autoTable({
+      head: [["ID", "Titre", "Machine", "Date"]],
+      body: dataToExport.map((item) => [
+        item.id,
+        item.title,
+        item.machine?.name || "N/A",
+        new Date(item.workDate).toLocaleDateString(),
+      ]),
+    });
+    doc.save("rapports.pdf");
+  };
+  const handleExportExcel = () => {
+    const dataToExport = reports.filter((r) => selectedReports.has(r.id));
+    if (dataToExport.length === 0) {
+      toast({ title: "Aucune sélection", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Exportation en cours..." });
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Rapports");
+    XLSX.writeFile(workbook, "rapports.xlsx");
+  };
+  const handleExportCSV = () => {
+    const dataToExport = reports.filter((r) => selectedReports.has(r.id));
+    if (dataToExport.length === 0) {
+      toast({ title: "Aucune sélection", variant: "destructive" });
+      return;
+    }
+    toast({ title: "Exportation en cours..." });
+    const csv = Papa.unparse(dataToExport);
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "rapports.csv");
+    link.click();
+  };
+
+  // --- Ajout du bouton Modifier sur chaque rapport ---
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const handleEditReport = (report: Report) => {
+    setSelectedReport(report);
+    setIsEditModalOpen(true);
+  };
+  const handleUpdateReport = (updatedReport: Report) => {
+    // Appeler l'API PUT pour sauvegarder le rapport modifié
+    setIsEditModalOpen(false);
+    // Rafraîchir la liste des rapports
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -205,6 +270,19 @@ const Reports = () => {
         </CardContent>
       </Card>
 
+      {/* --- Ajout des boutons d'export --- */}
+      <div className="flex gap-2 mb-4">
+        <Button variant="outline" onClick={handleExportPDF}>
+          Exporter PDF
+        </Button>
+        <Button variant="outline" onClick={handleExportExcel}>
+          Exporter Excel
+        </Button>
+        <Button variant="outline" onClick={handleExportCSV}>
+          Exporter CSV
+        </Button>
+      </div>
+
       <div className="space-y-4">
         <div className="flex items-center gap-4">
           <Checkbox
@@ -235,6 +313,7 @@ const Reports = () => {
               report={report}
               isSelected={selectedReports.has(report.id)}
               onSelect={handleSelectReport}
+              onEdit={() => handleEditReport(report)}
             />
           ))
         ) : (
@@ -249,6 +328,14 @@ const Reports = () => {
           onClear={() => setSelectedReports(new Set())}
         />
       )}
+
+      {/* --- Ajout du modal d'édition de rapport --- */}
+      <EditReportModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        report={selectedReport}
+        onSave={handleUpdateReport}
+      />
     </div>
   );
 };
@@ -299,8 +386,55 @@ const CreateReportModal = () => {
       }),
   });
 
-  const onSubmit: SubmitHandler<CreateReportFormData> = (data) =>
-    createReportMutation.mutate(data);
+  // --- Ajout de l'upload multiple d'images dans CreateReportModal ---
+  const [images, setImages] = useState<File[]>([]);
+  const handleImagesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    
+    // Validation des fichiers
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+      'video/mp4', 'video/avi', 'video/mov',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'
+    ];
+    
+    const validFiles = files.filter(file => {
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Type de fichier non autorisé",
+          description: `${file.name} n'est pas un type de fichier autorisé`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      if (file.size > maxSize) {
+        toast({
+          title: "Fichier trop volumineux",
+          description: `${file.name} dépasse la taille maximale de 50MB`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      
+      return true;
+    });
+    
+    setImages(validFiles);
+  };
+
+  const onSubmit: SubmitHandler<CreateReportFormData> = (data) => {
+    const formData = new FormData();
+    Object.entries(data).forEach(([key, value]) => {
+      formData.append(key, value as string);
+    });
+    images.forEach((file) => formData.append('files', file));
+    createReportMutation.mutate(formData as any);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -474,6 +608,21 @@ const CreateReportModal = () => {
                 </FormItem>
               )}
             />
+            <div className="space-y-2">
+              <Label>Fichiers associés (optionnel)</Label>
+              <Input 
+                type="file" 
+                name="files" 
+                accept="image/*,video/*,.pdf,.doc,.docx,.txt" 
+                multiple 
+                onChange={handleImagesChange} 
+              />
+              {images.length > 0 && (
+                <div className="text-sm text-gray-500">
+                  {images.length} fichier(s) sélectionné(s)
+                </div>
+              )}
+            </div>
             <DialogFooter className="pt-4">
               <DialogClose asChild>
                 <Button type="button" variant="outline">
@@ -497,10 +646,12 @@ const ReportCard = ({
   report,
   isSelected,
   onSelect,
+  onEdit,
 }: {
   report: Report;
   isSelected: boolean;
   onSelect: (id: number, checked: boolean) => void;
+  onEdit: () => void;
 }) => {
   const getStatusLabel = (s: string) =>
     ({
@@ -566,8 +717,8 @@ const ReportCard = ({
             <span>{report.workType}</span>
           </div>
           <div className="flex justify-end">
-            <Button variant="outline" size="sm">
-              Voir détails
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              Modifier
             </Button>
           </div>
         </div>
@@ -656,5 +807,391 @@ const EmptyState = () => (
     </CardContent>
   </Card>
 );
+
+// --- Ajout du modal d'édition de rapport ---
+const EditReportModal = ({
+  isOpen,
+  onClose,
+  report,
+  onSave,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  report: Report | null;
+  onSave: (updatedReport: Report) => void;
+}) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const editReportSchema = z.object({
+    title: z.string().min(3, "Le titre doit faire au moins 3 caractères."),
+    machineId: z.string().min(1, "Veuillez sélectionner une machine."),
+    workDate: z.string().min(1, "La date est requise."),
+    workType: z.string().min(1, "Le type de travail est requis."),
+    priority: z.string().min(1, "La priorité est requise."),
+    problemDescription: z
+      .string()
+      .min(10, "Veuillez décrire le problème (10 caractères min)."),
+    actionsTaken: z
+      .string()
+      .min(10, "Veuillez décrire les actions (10 caractères min)."),
+  });
+  const form = useForm<z.infer<typeof editReportSchema>>({
+    resolver: zodResolver(editReportSchema),
+    defaultValues: {
+      title: report?.title || "",
+      machineId: report?.machine.id.toString() || "",
+      workDate: report?.workDate || new Date().toISOString().split("T")[0],
+      workType: report?.workType || "maintenance",
+      priority: report?.priority || "medium",
+      problemDescription: report?.problemDescription || "",
+      actionsTaken: report?.actionsTaken || "",
+    },
+  });
+
+  const { data: machinesData, isLoading: isLoadingMachines } =
+    useQuery<MachinesResponse>({
+      queryKey: ["machinesList"],
+      queryFn: () => api.get("machines"),
+    });
+  const machines = machinesData?.machines || [];
+
+  const editReportMutation = useMutation({
+    mutationFn: (updatedReport: z.infer<typeof editReportSchema>) =>
+      api.put(`reports/${report?.id}`, updatedReport),
+    onSuccess: () => {
+      toast({
+        title: "Rapport modifié",
+        description: "Le rapport a été modifié avec succès.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      onSave(report as Report); // Pass the updated report to the parent
+      onClose();
+      form.reset();
+    },
+    onError: (err: any) =>
+      toast({
+        title: "Erreur",
+        description: err.message,
+        variant: "destructive",
+      }),
+  });
+
+  const onSubmit: SubmitHandler<z.infer<typeof editReportSchema>> = (data) => {
+    setIsSubmitting(true);
+    editReportMutation.mutate(data);
+  };
+
+  if (!report) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Modifier le rapport</DialogTitle>
+          <DialogDescription>
+            Modifiez les détails de l'intervention ci-dessous.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4 pt-4"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Titre du rapport</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: Maintenance préventive..."
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="machineId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Machine</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      {isLoadingMachines ? (
+                        <Input
+                          disabled
+                          placeholder="Chargement des machines..."
+                        />
+                      ) : (
+                        <>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Sélectionner une machine" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {machines.map((m) => (
+                              <SelectItem key={m.id} value={m.id.toString()}>
+                                {m.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </>
+                      )}
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="workDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date de travail</FormLabel>
+                  <FormControl>
+                    <Input type="date" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="workType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Type de travail</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="maintenance">Maintenance</SelectItem>
+                        <SelectItem value="repair">Réparation</SelectItem>
+                        <SelectItem value="inspection">Inspection</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priorité</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Faible</SelectItem>
+                        <SelectItem value="medium">Moyenne</SelectItem>
+                        <SelectItem value="high">Élevée</SelectItem>
+                        <SelectItem value="critical">Critique</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="problemDescription"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description du problème</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={3}
+                      placeholder="Décrivez le problème rencontré..."
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="actionsTaken"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Actions effectuées</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={3}
+                      placeholder="Décrivez les actions prises..."
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter className="pt-4">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  Annuler
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Modification..." : "Enregistrer les modifications"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// --- Galerie d'images avec lightbox améliorée ---
+const ReportDetailGallery = ({ attachments }: { attachments: any[] }) => {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const images = attachments.filter(a => a.category === 'image');
+  
+  if (images.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+        <p>Aucune image attachée</p>
+      </div>
+    );
+  }
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (lightboxIndex === null) return;
+    
+    switch (e.key) {
+      case 'Escape':
+        setLightboxIndex(null);
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        setLightboxIndex((lightboxIndex - 1 + images.length) % images.length);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        setLightboxIndex((lightboxIndex + 1) % images.length);
+        break;
+    }
+  };
+
+  React.useEffect(() => {
+    if (lightboxIndex !== null) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [lightboxIndex]);
+
+  return (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
+        {images.map((img, idx) => (
+          <button 
+            key={img.id} 
+            type="button" 
+            onClick={() => setLightboxIndex(idx)} 
+            className="focus:outline-none group relative overflow-hidden rounded-lg"
+          >
+            <img 
+              src={getImageUrl(img.path)} 
+              alt={img.originalName} 
+              className="w-full h-32 object-cover transition-transform duration-200 group-hover:scale-105" 
+              onError={(e) => {
+                e.currentTarget.src = '/placeholder.svg';
+                e.currentTarget.alt = 'Image non disponible';
+              }}
+            />
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <FileText className="h-6 w-6 text-white" />
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+      
+      {lightboxIndex !== null && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90" 
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button 
+            className="absolute top-4 right-4 text-white text-2xl hover:text-gray-300 transition-colors p-2" 
+            onClick={() => setLightboxIndex(null)}
+          >
+            ✕
+          </button>
+          
+          <button 
+            className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white text-3xl hover:text-gray-300 transition-colors p-2" 
+            onClick={e => { 
+              e.stopPropagation(); 
+              setLightboxIndex((lightboxIndex - 1 + images.length) % images.length); 
+            }}
+          >
+            ‹
+          </button>
+          
+          <div className="relative max-h-[80vh] max-w-[90vw]">
+            <img 
+              src={getImageUrl(images[lightboxIndex].path)} 
+              alt={images[lightboxIndex].originalName} 
+              className="max-h-[80vh] max-w-[90vw] rounded shadow-lg object-contain"
+              onError={(e) => {
+                e.currentTarget.src = '/placeholder.svg';
+                e.currentTarget.alt = 'Image non disponible';
+              }}
+            />
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white bg-black bg-opacity-50 px-3 py-1 rounded text-sm">
+              {lightboxIndex + 1} / {images.length}
+            </div>
+          </div>
+          
+          <button 
+            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white text-3xl hover:text-gray-300 transition-colors p-2" 
+            onClick={e => { 
+              e.stopPropagation(); 
+              setLightboxIndex((lightboxIndex + 1) % images.length); 
+            }}
+          >
+            ›
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
 
 export default Reports;

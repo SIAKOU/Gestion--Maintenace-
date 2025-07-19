@@ -95,6 +95,11 @@ module.exports = (sequelize, DataTypes) => {
         field: "next_maintenance_date",
         type: DataTypes.DATE,
       },
+      image: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: "Chemin de la photo de la machine",
+      },
     },
     {
       tableName: "machines",

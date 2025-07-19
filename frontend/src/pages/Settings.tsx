@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Settings as SettingsIcon,
   User,
@@ -27,11 +27,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { useNavigate } from "react-router-dom";
+import { getImageUrl } from '@/lib/api';
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import Papa from "papaparse";
 
 type UserRole = "admin" | "technician" | "administration";
 
@@ -70,7 +76,8 @@ interface SecurityForm {
 
 const Settings = () => {
   const { toast } = useToast();
-  const { user: authUser } = useAuth();
+  const { user: authUser, refetchUser } = useAuth();
+  const navigate = useNavigate();
 
   // État initial par défaut aligné avec le modèle Sequelize
   const defaultUser: UserData = {
@@ -104,6 +111,7 @@ const Settings = () => {
   const [exportFormat, setExportFormat] = useState("pdf");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadUserData = () => {
@@ -193,12 +201,12 @@ const Settings = () => {
     };
 
     setUser(updatedUser);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
     toast({
       title: "Profil mis à jour",
       description: "Vos informations ont été sauvegardées avec succès.",
       variant: "default",
     });
+    refetchUser();
   };
 
   const changePassword = () => {
@@ -277,13 +285,104 @@ const Settings = () => {
     }`;
   };
 
+  // Fonctions pour gérer l'upload/suppression d'avatar
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !authUser) return;
+    const formData = new FormData();
+    formData.append("avatar", file);
+    try {
+      const res = await fetch(`/api/users/${authUser.id}`, {
+        method: "PUT",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erreur lors de l'upload de l'avatar");
+      const data = await res.json();
+      setUser((prev) => ({ ...prev, avatar: data.user.avatar }));
+      toast({ title: "Photo de profil mise à jour" });
+      refetchUser();
+    } catch (err) {
+      toast({ title: "Erreur", description: "Impossible de mettre à jour la photo.", variant: "destructive" });
+    }
+  };
+  const handleRemoveAvatar = async () => {
+    if (!authUser) return;
+    try {
+      const res = await fetch(`/api/users/${authUser.id}/avatar`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Erreur lors de la suppression de l'avatar");
+      setUser((prev) => ({ ...prev, avatar: undefined }));
+      toast({ title: "Photo de profil supprimée" });
+      refetchUser();
+    } catch (err) {
+      toast({ title: "Erreur", description: "Impossible de supprimer la photo.", variant: "destructive" });
+    }
+  };
+
+  // --- Fonctions d'export corrigées ---
+  const handleExportPDF = () => {
+    import('jspdf').then(jsPDFModule => {
+      const jsPDF = jsPDFModule.default;
+      const doc = new jsPDF();
+      doc.text("Profil Utilisateur", 14, 16);
+      (doc as any).autoTable({
+        head: [["Champ", "Valeur"]],
+        body: Object.entries(user).map(([k, v]) => [k, String(v ?? "")]),
+      });
+      doc.save("profil.pdf");
+      toast({ title: "Export PDF terminé" });
+    });
+  };
+  const handleExportExcel = () => {
+    import('xlsx').then(XLSX => {
+      const worksheet = XLSX.utils.json_to_sheet([user]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Profil");
+      XLSX.writeFile(workbook, "profil.xlsx");
+      toast({ title: "Export Excel terminé" });
+    });
+  };
+  const handleExportCSV = () => {
+    import('papaparse').then(Papa => {
+      const csv = Papa.unparse([user]);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", "profil.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "Export CSV terminé" });
+    });
+  };
+  const handleExportJSON = () => {
+    const blob = new Blob([JSON.stringify(user, null, 2)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute("download", "profil.json");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast({ title: "Export JSON terminé" });
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <span className="ml-4 text-gray-500">Chargement du profil utilisateur...</span>
       </div>
     );
   }
+  if (!authUser) {
+    navigate("/", { replace: true });
+    return null;
+  }
+
+  const BACKEND_URL = 'http://localhost:5000';
 
   return (
     <div className="space-y-8 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -317,18 +416,26 @@ const Settings = () => {
             <CardContent className="space-y-6">
               <div className="flex flex-col sm:flex-row items-center gap-6">
                 <Avatar className="h-20 w-20">
-                  <AvatarImage src={user.avatar} />
+                  <AvatarImage src={getImageUrl(user.avatar)} />
                   <AvatarFallback className="text-xl font-medium bg-gray-100 dark:bg-gray-800">
-                    {getInitials()}
+                    {getInitials() || "?"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                  <Button variant="outline" className="w-full sm:w-auto">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => fileInputRef.current?.click()}>
                     Changer la photo
                   </Button>
-                  <Button variant="outline" className="w-full sm:w-auto">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={handleRemoveAvatar}>
                     Supprimer
                   </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    name="avatar"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
                 </div>
               </div>
 
@@ -337,7 +444,7 @@ const Settings = () => {
                   <Label htmlFor="firstName">Prénom</Label>
                   <Input
                     id="firstName"
-                    value={profileForm.firstName}
+                    value={profileForm.firstName || ""}
                     onChange={handleProfileChange}
                     placeholder="Votre prénom"
                   />
@@ -346,7 +453,7 @@ const Settings = () => {
                   <Label htmlFor="lastName">Nom</Label>
                   <Input
                     id="lastName"
-                    value={profileForm.lastName}
+                    value={profileForm.lastName || ""}
                     onChange={handleProfileChange}
                     placeholder="Votre nom"
                   />
@@ -358,7 +465,7 @@ const Settings = () => {
                 <Input
                   id="email"
                   type="email"
-                  value={profileForm.email}
+                  value={profileForm.email || ""}
                   onChange={handleProfileChange}
                   placeholder="votre@email.com"
                 />
@@ -369,7 +476,7 @@ const Settings = () => {
                 <Input
                   id="phone"
                   type="tel"
-                  value={profileForm.phone}
+                  value={profileForm.phone || ""}
                   onChange={handleProfileChange}
                   placeholder="+228 XX XX XX XX"
                 />
@@ -497,37 +604,25 @@ const Settings = () => {
             </CardContent>
           </Card>
 
-          <Card className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm">
+          {/* --- Section Données responsive --- */}
+          <Card className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm max-w-full">
             <CardHeader>
               <div className="flex items-center space-x-3">
                 <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/50">
                   <Database className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg font-semibold">
-                    Données
-                  </CardTitle>
-                  <CardDescription>
-                    Gestion des données personnelles
-                  </CardDescription>
+                  <CardTitle className="text-lg font-semibold">Données</CardTitle>
+                  <CardDescription>Gestion des données personnelles</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>Format d'export</Label>
-                <Select value={exportFormat} onValueChange={setExportFormat}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Sélectionnez un format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["pdf", "excel", "csv", "json", "xml", "txt"].map((format) => (
-                      <SelectItem key={format} value={format}>
-                        {format.toUpperCase()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <Button type="button" variant="outline" onClick={handleExportPDF}>Export PDF</Button>
+                <Button type="button" variant="outline" onClick={handleExportExcel}>Export Excel</Button>
+                <Button type="button" variant="outline" onClick={handleExportCSV}>Export CSV</Button>
+                <Button type="button" variant="outline" onClick={handleExportJSON}>Export JSON</Button>
               </div>
 
               <Button
@@ -611,4 +706,10 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default function SettingsProtected() {
+  return (
+    <ProtectedRoute>
+      <Settings />
+    </ProtectedRoute>
+  );
+}

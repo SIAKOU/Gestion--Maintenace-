@@ -11,8 +11,10 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { getImageUrl } from '@/lib/api';
 
 // --- TYPES ---
 interface LayoutProps {
@@ -56,21 +58,22 @@ const Sidebar = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { user, logout: contextLogout, refetchUser } = useAuth();
 
   const navigation = [
     { name: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
     { name: "Rapports", href: "/reports", icon: FileText },
     { name: "Machines", href: "/machines", icon: Building2 },
-    ...(user.role === "admin"
+    ...(user?.role === "admin"
       ? [{ name: "Utilisateurs", href: "/users", icon: Users }]
       : []),
     { name: "Paramètres", href: "/settings", icon: Settings },
   ];
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    contextLogout();
+    refetchUser();
     toast({ title: "Déconnexion réussie", description: "À bientôt !" });
     navigate("/");
   };
@@ -122,39 +125,47 @@ const SidebarHeader = () => (
 const UserInfo = ({
   user,
 }: {
-  user: { firstName?: string; lastName?: string; role: string };
+  user: { firstName?: string; lastName?: string; role?: string; avatar?: string } | null;
 }) => {
-  const getRoleLabel = (role: string) =>
+  const getRoleLabel = (role?: string) =>
     ({
       admin: "Administrateur",
       technician: "Technicien",
       administration: "Administration",
-    }[role] || role);
-  const getRoleColor = (role: string) =>
+    }[role || ""] || "Rôle inconnu");
+  const getRoleColor = (role?: string) =>
     ({
       admin: "bg-red-100 text-red-800",
       technician: "bg-blue-100 text-blue-800",
       administration: "bg-green-100 text-green-800",
-    }[role] || "bg-gray-100 text-gray-800");
+    }[role || ""] || "bg-gray-100 text-gray-800");
+
+  const initials =
+    (user?.firstName?.[0] || "?") + (user?.lastName?.[0] || "?");
 
   return (
     <div className="p-6 border-b border-gray-200">
       <div className="flex items-center space-x-3">
-        <Avatar>
-          <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
-            {(user.firstName?.[0] || "") + (user.lastName?.[0] || "")}
+        <Avatar className="h-12 w-12">
+          <AvatarImage 
+            src={getImageUrl(user?.avatar)} 
+            alt={`${user?.firstName} ${user?.lastName}`}
+            className="object-cover"
+          />
+          <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold text-lg">
+            {initials}
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 truncate">
-            {user.firstName} {user.lastName}
+            {user?.firstName || "Utilisateur"} {user?.lastName || "inconnu"}
           </p>
           <span
             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getRoleColor(
-              user.role
+              user?.role
             )}`}
           >
-            {getRoleLabel(user.role)}
+            {getRoleLabel(user?.role)}
           </span>
         </div>
       </div>

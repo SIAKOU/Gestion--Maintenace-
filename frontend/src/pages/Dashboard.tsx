@@ -161,7 +161,7 @@ const Dashboard = () => {
         <div>
           {/* --- AMÉLIORATION : Utilisation de la salutation et du nom complet --- */}
           <h1 className="text-3xl font-bold text-gray-900">
-            {getGreeting()}, {user?.firstName } 👋
+            {getGreeting()}, {user?.firstName || "Utilisateur"} 👋
           </h1>
           <p className="text-gray-500 mt-1">
             Voici un aperçu de votre activité maintenance.
@@ -171,14 +171,14 @@ const Dashboard = () => {
           <Button
             variant="outline"
             className="w-full sm:w-auto"
-            onClick={() => navigate("/planning")}
+            onClick={() => navigate("/reports")}
           >
             <Calendar className="h-4 w-4 mr-2" />
-            Planifier
+            Voir Rapports
           </Button>
           <Button
             className="w-full sm:w-auto"
-            onClick={() => navigate("/reports/new")}
+            onClick={() => navigate("/reports")}
           >
             <Wrench className="h-4 w-4 mr-2" />
             Nouv. Intervention

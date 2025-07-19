@@ -6,6 +6,7 @@ import { createHtmlPlugin } from "vite-plugin-html";
 import checker from "vite-plugin-checker";
 import { componentTagger } from "lovable-tagger";
 import { networkInterfaces } from "os";
+import os from 'os';
 
 // Fonction pour obtenir l'IP locale avec vérification de sécurité
 const getLocalIP = (): string => {
@@ -23,6 +24,20 @@ const getLocalIP = (): string => {
   }
   return "localhost";
 };
+
+function getLocalExternalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]!) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
+
+const localIP = getLocalExternalIP();
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -112,6 +127,9 @@ export default defineConfig(({ mode }) => {
       modules: {
         localsConvention: "camelCaseOnly",
       },
+    },
+    define: {
+      'import.meta.env.VITE_API_URL': JSON.stringify(`http://${localIP}:5000/api`),
     },
   };
 });

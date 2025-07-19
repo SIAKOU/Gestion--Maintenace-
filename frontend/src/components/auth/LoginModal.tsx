@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { api, ApiError, User } from "@/lib/api";
 
 interface LoginResponse {
@@ -20,9 +21,10 @@ interface LoginResponse {
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onLoginSuccess?: () => void;
 }
 
-const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
+const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -32,25 +34,27 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const [isSending, setIsSending] = useState(false);
 
   const { toast } = useToast();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const data = await api.post<LoginResponse, unknown>("auth/login", {
+      const response = await api.post<LoginResponse, unknown>("auth/login", {
         email,
         password,
       });
 
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      // Utiliser la fonction login de l'AuthContext
+      login(response.token);
 
       toast({
         title: "Connexion réussie",
-        description: `Bienvenue, ${data.user.firstName} ! Redirection...`,
+        description: `Bienvenue, ${response.user.firstName} ! Redirection...`,
       });
 
-      window.location.href = "/dashboard";
+      onLoginSuccess?.();
+      onClose();
     } catch (error) {
       const description =
         error instanceof ApiError &&
@@ -63,6 +67,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         description,
         variant: "destructive",
       });
+    } finally {
       setIsLoading(false);
     }
   };

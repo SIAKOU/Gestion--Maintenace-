@@ -31,6 +31,13 @@ module.exports = (sequelize, DataTypes) => {
       category: {
         type: DataTypes.ENUM("image", "video", "document", "audio", "other"),
         allowNull: false,
+        defaultValue: "other",
+      },
+      fileType: {
+        field: "file_type",
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        comment: "Type de fichier (avatar, machine, report)",
       },
       description: {
         type: DataTypes.STRING(255),
@@ -50,6 +57,24 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         references: {
           model: "reports",
+          key: "id",
+        },
+      },
+      machineId: {
+        field: "machine_id",
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "machines",
+          key: "id",
+        },
+      },
+      userId: {
+        field: "user_id",
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "users",
           key: "id",
         },
       },
