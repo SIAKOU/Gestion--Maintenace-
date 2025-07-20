@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import Reports from "./pages/Reports";
 import Machines from "./pages/Machines";
+import MaintenanceSchedules from "./pages/MaintenanceSchedules";
 import UsersProtected from "./pages/Users";
 import SettingsProtected from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,7 @@ const App = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/machines" element={<Machines />} />
+        <Route path="/maintenance" element={<MaintenanceSchedules />} />
         <Route path="/settings" element={<SettingsProtected />} />
       </Route>
 

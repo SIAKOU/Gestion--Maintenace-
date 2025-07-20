@@ -78,6 +78,15 @@ module.exports = (sequelize, DataTypes) => {
           key: "id",
         },
       },
+      maintenanceScheduleId: {
+        field: "maintenance_schedule_id",
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "maintenance_schedules",
+          key: "id",
+        },
+      },
       uploadedBy: {
         field: "uploaded_by",
         type: DataTypes.INTEGER,

@@ -13,6 +13,12 @@ import {
   AlertCircle as AlertErrorIcon,
   PlusCircle,
   ListTodo,
+  TrendingUp,
+  DollarSign,
+  Activity,
+  Zap,
+  Shield,
+  Target,
 } from "lucide-react";
 import {
   Card,
@@ -25,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { api, Report, Machine } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -35,9 +42,17 @@ type DashboardData = {
     operationalMachinesPercentage: number;
     avgResolutionTime: string;
     urgentInterventions: number;
+    totalMaintenances: number;
+    maintenancesInProgress: number;
+    maintenancesCompleted: number;
+    maintenancesOverdue: number;
+    totalCost: number;
+    efficiencyScore: number;
   };
   recentInterventions: Report[];
   upcomingMaintenance: Machine[];
+  maintenanceSchedules: any[];
+  urgentTasks: any[];
 };
 
 // --- FONCTION D'APPEL API (ROBUSTE) ---
@@ -45,18 +60,21 @@ const getDashboardData = async (): Promise<DashboardData> => {
   let recentInterventions: Report[] = [];
   let upcomingMaintenance: Machine[] = [];
   let allMachines: Machine[] = [];
+  let maintenanceSchedules: any[] = [];
+  let urgentTasks: any[] = [];
 
   try {
-    const [interventionsResponse, upcomingMaintResponse, allMachinesResponse] =
-      await Promise.all([
-        api.get<any>("reports?limit=3&sortBy=createdAt:desc").catch(() => null),
-        api
-          .get<any>(
-            "machines?limit=3&sortBy=nextMaintenanceDate:asc&status=operational"
-          )
-          .catch(() => null),
-        api.get<any>("machines").catch(() => null),
-      ]);
+    const [
+      interventionsResponse, 
+      upcomingMaintResponse, 
+      allMachinesResponse,
+      maintenanceSchedulesResponse
+    ] = await Promise.all([
+      api.get<any>("reports?limit=5&sortBy=createdAt:desc").catch(() => null),
+      api.get<any>("machines?limit=5&sortBy=nextMaintenanceDate:asc&status=operational").catch(() => null),
+      api.get<any>("machines").catch(() => null),
+      api.get<any>("maintenance-schedules?limit=10&sortBy=scheduled_date:asc").catch(() => null),
+    ]);
 
     if (interventionsResponse)
       recentInterventions = Array.isArray(interventionsResponse)
@@ -70,32 +88,48 @@ const getDashboardData = async (): Promise<DashboardData> => {
       allMachines = Array.isArray(allMachinesResponse)
         ? allMachinesResponse
         : allMachinesResponse?.machines || [];
+    if (maintenanceSchedulesResponse)
+      maintenanceSchedules = Array.isArray(maintenanceSchedulesResponse)
+        ? maintenanceSchedulesResponse
+        : maintenanceSchedulesResponse?.data || [];
+
+    // Calculer les tâches urgentes
+    // Correction : le statut 'pending' n'existe pas pour les interventions, on filtre uniquement par priorité critique
+    urgentTasks = [
+      ...recentInterventions.filter(r => r.priority === 'critical'),
+      ...maintenanceSchedules.filter(m => m.status === 'overdue' || m.priority === 'critical')
+    ].slice(0, 5);
+
   } catch (error) {
-    console.error(
-      "Erreur lors de la récupération des données du dashboard:",
-      error
-    );
+    console.error("Erreur lors de la récupération des données du dashboard:", error);
   }
 
   const totalMachines = allMachines.length;
-  const operationalMachines = allMachines.filter(
-    (m) => m.status === "operational"
-  ).length;
-  const operationalMachinesPercentage =
-    totalMachines > 0
-      ? Math.round((operationalMachines / totalMachines) * 100)
-      : 100;
+  const operationalMachines = allMachines.filter((m) => m.status === "operational").length;
+  const operationalMachinesPercentage = totalMachines > 0 ? Math.round((operationalMachines / totalMachines) * 100) : 100;
+
+  const totalMaintenances = maintenanceSchedules.length;
+  const maintenancesInProgress = maintenanceSchedules.filter(m => m.status === 'in_progress').length;
+  const maintenancesCompleted = maintenanceSchedules.filter(m => m.status === 'completed').length;
+  const maintenancesOverdue = maintenanceSchedules.filter(m => m.status === 'overdue').length;
+
+  const totalCost = maintenanceSchedules.reduce((sum, m) => sum + (m.actual_cost || 0), 0);
+  const efficiencyScore = totalMaintenances > 0 ? Math.round((maintenancesCompleted / totalMaintenances) * 100) : 100;
 
   const stats = {
     interventionsToday: recentInterventions.length,
-    operationalMachinesPercentage: operationalMachinesPercentage,
+    operationalMachinesPercentage,
     avgResolutionTime: "N/A",
-    urgentInterventions: recentInterventions.filter(
-      (r) => r.priority === "critical"
-    ).length,
+    urgentInterventions: recentInterventions.filter((r) => r.priority === "critical").length,
+    totalMaintenances,
+    maintenancesInProgress,
+    maintenancesCompleted,
+    maintenancesOverdue,
+    totalCost,
+    efficiencyScore
   };
 
-  return { stats, recentInterventions, upcomingMaintenance };
+  return { stats, recentInterventions, upcomingMaintenance, maintenanceSchedules, urgentTasks };
 };
 
 // --- COMPOSANT PRINCIPAL ---
@@ -111,6 +145,7 @@ const Dashboard = () => {
     queryKey: ["dashboardData"],
     queryFn: getDashboardData,
     enabled: !!user,
+    refetchInterval: 30000, // Rafraîchir toutes les 30 secondes
   });
 
   // --- AMÉLIORATION : Fonction pour la salutation dynamique ---
@@ -150,31 +185,49 @@ const Dashboard = () => {
       operationalMachinesPercentage: 100,
       avgResolutionTime: "N/A",
       urgentInterventions: 0,
+      totalMaintenances: 0,
+      maintenancesInProgress: 0,
+      maintenancesCompleted: 0,
+      maintenancesOverdue: 0,
+      totalCost: 0,
+      efficiencyScore: 100
     },
     recentInterventions: [],
     upcomingMaintenance: [],
+    maintenanceSchedules: [],
+    urgentTasks: []
   };
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          {/* --- AMÉLIORATION : Utilisation de la salutation et du nom complet --- */}
-          <h1 className="text-3xl font-bold text-gray-900">
+      {/* En-tête amélioré */}
+      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+        <div className="flex-1">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
             {getGreeting()}, {user?.firstName || "Utilisateur"} 👋
           </h1>
-          <p className="text-gray-500 mt-1">
-            Voici un aperçu de votre activité maintenance.
+          <p className="text-lg text-gray-600">
+            Voici un aperçu complet de votre activité maintenance.
           </p>
+          <div className="flex items-center gap-4 mt-3">
+            <Badge variant="outline" className="text-sm">
+              <Activity className="w-3 h-3 mr-1" />
+              {safeData.stats.efficiencyScore}% d'efficacité
+            </Badge>
+            <Badge variant="outline" className="text-sm">
+              <Shield className="w-3 h-3 mr-1" />
+              {safeData.stats.operationalMachinesPercentage}% machines opérationnelles
+            </Badge>
+          </div>
         </div>
-        <div className="flex gap-3 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           <Button
             variant="outline"
             className="w-full sm:w-auto"
-            onClick={() => navigate("/reports")}
+            onClick={() => navigate("/maintenance")}
           >
             <Calendar className="h-4 w-4 mr-2" />
-            Voir Rapports
+            Planifier Maintenance
           </Button>
           <Button
             className="w-full sm:w-auto"
@@ -186,53 +239,116 @@ const Dashboard = () => {
         </div>
       </header>
 
+      {/* Statistiques principales */}
       <StatsSection stats={safeData.stats} />
+      
+      {/* Tâches urgentes */}
+      <UrgentTasksSection urgentTasks={safeData.urgentTasks} />
+      
+      {/* Contenu principal */}
       <MainContentSection
         recentInterventions={safeData.recentInterventions}
         upcomingMaintenance={safeData.upcomingMaintenance}
+        maintenanceSchedules={safeData.maintenanceSchedules}
       />
+      
+      {/* Actions rapides */}
       <QuickActionsSection />
     </div>
   );
 };
 
-// --- SOUS-COMPOSANTS (inchangés, ils sont déjà robustes) ---
+// --- SOUS-COMPOSANTS AMÉLIORÉS ---
 
 const StatsSection = ({ stats }: { stats: DashboardData["stats"] }) => (
-  <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+  <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
     <StatCard
-      title="Interventions récentes"
+      title="Interventions Aujourd'hui"
       value={stats.interventionsToday}
       icon={<Wrench className="h-6 w-6 text-blue-600" />}
+      trend="+12%"
+      trendUp={true}
     />
     <StatCard
-      title="Machines opérationnelles"
+      title="Maintenances Planifiées"
+      value={stats.totalMaintenances}
+      icon={<Calendar className="h-6 w-6 text-purple-600" />}
+      trend={`${stats.maintenancesInProgress} en cours`}
+    />
+    <StatCard
+      title="Machines Opérationnelles"
       value={`${stats.operationalMachinesPercentage}%`}
-      icon={<CheckCircle className="h-6 w-6 text-green-600" />}
+      icon={<Building2 className="h-6 w-6 text-green-600" />}
+      progress={stats.operationalMachinesPercentage}
     />
     <StatCard
-      title="Temps moyen de résolution"
-      value={stats.avgResolutionTime}
-      icon={<Clock className="h-6 w-6 text-orange-600" />}
-    />
-    <StatCard
-      title="Interventions urgentes"
-      value={stats.urgentInterventions}
+      title="Tâches Urgentes"
+      value={stats.urgentInterventions + stats.maintenancesOverdue}
       icon={<AlertTriangle className="h-6 w-6 text-red-600" />}
+      urgent={true}
     />
   </section>
 );
 
+const UrgentTasksSection = ({ urgentTasks }: { urgentTasks: any[] }) => {
+  const navigate = useNavigate();
+  
+  if (urgentTasks.length === 0) return null;
+
+  return (
+    <Card className="border-red-200 bg-red-50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-red-800">
+          <AlertTriangle className="h-5 w-5" />
+          Tâches Urgentes
+        </CardTitle>
+        <CardDescription className="text-red-600">
+          Actions requises immédiatement
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {urgentTasks.slice(0, 3).map((task, index) => (
+            <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border border-red-200">
+              <div className="flex-1">
+                <p className="font-medium text-gray-800">
+                  {task.title || task.name || 'Tâche urgente'}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {task.machine?.name || task.description || 'Action requise'}
+                </p>
+              </div>
+              <Badge variant="destructive" className="ml-2">
+                {task.priority === 'critical' ? 'Critique' : 'Urgent'}
+              </Badge>
+            </div>
+          ))}
+        </div>
+        <Button 
+          variant="outline" 
+          className="w-full mt-4 border-red-300 text-red-700 hover:bg-red-100"
+          onClick={() => navigate("/reports")}
+        >
+          Voir toutes les tâches urgentes
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
 const MainContentSection = ({
   recentInterventions,
   upcomingMaintenance,
+  maintenanceSchedules,
 }: {
   recentInterventions: Report[];
   upcomingMaintenance: Machine[];
+  maintenanceSchedules: any[];
 }) => (
-  <section className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+  <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
     <RecentInterventionsCard interventions={recentInterventions} />
     <UpcomingMaintenanceCard maintenances={upcomingMaintenance} />
+    <MaintenanceSchedulesCard schedules={maintenanceSchedules} />
   </section>
 );
 
@@ -241,7 +357,10 @@ const QuickActionsSection = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Actions rapides</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="h-5 w-5 text-yellow-600" />
+          Actions Rapides
+        </CardTitle>
         <CardDescription>
           Accès direct aux fonctionnalités principales.
         </CardDescription>
@@ -249,9 +368,14 @@ const QuickActionsSection = () => {
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <QuickActionButton
-            onClick={() => navigate("/reports/new")}
+            onClick={() => navigate("/reports")}
             icon={<Wrench className="h-7 w-7 text-blue-600" />}
             label="Nouv. Intervention"
+          />
+          <QuickActionButton
+            onClick={() => navigate("/maintenance")}
+            icon={<Calendar className="h-7 w-7 text-purple-600" />}
+            label="Planifier Maintenance"
           />
           <QuickActionButton
             onClick={() => navigate("/machines")}
@@ -260,13 +384,8 @@ const QuickActionsSection = () => {
           />
           <QuickActionButton
             onClick={() => navigate("/users")}
-            icon={<Users className="h-7 w-7 text-purple-600" />}
+            icon={<Users className="h-7 w-7 text-orange-600" />}
             label="Gérer l'Équipe"
-          />
-          <QuickActionButton
-            onClick={() => navigate("/reports")}
-            icon={<FileText className="h-7 w-7 text-orange-600" />}
-            label="Voir les Rapports"
           />
         </div>
       </CardContent>
@@ -278,19 +397,41 @@ const StatCard = ({
   title,
   value,
   icon,
+  trend,
+  trendUp,
+  progress,
+  urgent,
 }: {
   title: string;
   value: string | number;
   icon: React.ReactNode;
+  trend?: string;
+  trendUp?: boolean;
+  progress?: number;
+  urgent?: boolean;
 }) => (
-  <Card>
+  <Card className={urgent ? "border-red-200 bg-red-50" : ""}>
     <CardContent className="p-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="flex-1">
           <p className="text-sm font-medium text-gray-500">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+          <p className={`text-3xl font-bold mt-1 ${urgent ? "text-red-800" : "text-gray-900"}`}>
+            {value}
+          </p>
+          {trend && (
+            <p className={`text-xs mt-1 ${trendUp ? "text-green-600" : "text-gray-500"}`}>
+              {trend}
+            </p>
+          )}
+          {progress !== undefined && (
+            <div className="mt-3">
+              <Progress value={progress} className="h-2" />
+            </div>
+          )}
         </div>
-        <div className="bg-slate-100 p-3 rounded-lg">{icon}</div>
+        <div className={`p-3 rounded-lg ${urgent ? "bg-red-100" : "bg-slate-100"}`}>
+          {icon}
+        </div>
       </div>
     </CardContent>
   </Card>
@@ -303,9 +444,7 @@ const RecentInterventionsCard = ({
 }) => {
   const navigate = useNavigate();
   const getStatusLabel = (s: string) =>
-    ({ pending: "En attente", in_progress: "En cours", completed: "Terminé" }[
-      s
-    ] || s);
+    ({ pending: "En attente", in_progress: "En cours", completed: "Terminé" }[s] || s);
   const getStatusColor = (s: string) =>
     ({
       pending: "bg-yellow-100 text-yellow-800",
@@ -334,7 +473,8 @@ const RecentInterventionsCard = ({
             {interventions.map((i) => (
               <div
                 key={i.id}
-                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigate(`/reports/${i.id}`)}
               >
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-800 truncate">
@@ -354,9 +494,7 @@ const RecentInterventionsCard = ({
                 <div className="flex flex-col items-end gap-1 ml-4">
                   <Badge
                     variant="secondary"
-                    className={`capitalize ${getPriorityColor(
-                      i.priority
-                    )} bg-opacity-20`}
+                    className={`capitalize ${getPriorityColor(i.priority)} bg-opacity-20`}
                   >
                     {i.priority}
                   </Badge>
@@ -414,7 +552,8 @@ const UpcomingMaintenanceCard = ({
             {maintenances.map((m) => (
               <div
                 key={m.id}
-                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg"
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigate(`/machines/${m.id}`)}
               >
                 <div>
                   <p className="font-medium text-gray-800">{m.name}</p>
@@ -437,21 +576,111 @@ const UpcomingMaintenanceCard = ({
           </div>
         ) : (
           <div className="text-center py-10">
-            <PlusCircle className="mx-auto h-12 w-12 text-gray-400" />
+            <Calendar className="mx-auto h-12 w-12 text-gray-400" />
             <h3 className="mt-2 text-sm font-medium text-gray-900">
               Aucune maintenance programmée
             </h3>
             <p className="mt-1 text-sm text-gray-500">
-              Planifiez une nouvelle maintenance.
+              Planifiez une maintenance pour commencer.
             </p>
           </div>
         )}
         <Button
           variant="outline"
           className="w-full mt-4"
-          onClick={() => navigate("/planning")}
+          onClick={() => navigate("/machines")}
         >
-          Voir le planning complet
+          Voir toutes les machines
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+const MaintenanceSchedulesCard = ({ schedules }: { schedules: any[] }) => {
+  const navigate = useNavigate();
+  
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'scheduled': return 'bg-blue-100 text-blue-800';
+      case 'in_progress': return 'bg-yellow-100 text-yellow-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'overdue': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'scheduled': return 'Planifiée';
+      case 'in_progress': return 'En cours';
+      case 'completed': return 'Terminée';
+      case 'overdue': return 'En retard';
+      default: return status;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Target className="h-5 w-5 text-purple-600" />
+          Maintenances planifiées
+        </CardTitle>
+        <CardDescription>Prochaines maintenances programmées.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {schedules.length > 0 ? (
+          <div className="space-y-3">
+            {schedules.slice(0, 5).map((schedule) => (
+              <div
+                key={schedule.id}
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                onClick={() => navigate(`/maintenance`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-800 truncate">
+                    {schedule.title}
+                  </p>
+                  <div className="flex items-center gap-x-4 mt-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1.5">
+                      <Building2 className="h-3 w-3" />
+                      {schedule.machine?.name || "N/A"}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="h-3 w-3" />
+                      {new Date(schedule.scheduled_date).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 ml-4">
+                  <Badge
+                    variant="secondary"
+                    className={getStatusColor(schedule.status)}
+                  >
+                    {getStatusLabel(schedule.status)}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-10">
+            <Target className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              Aucune maintenance planifiée
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Planifiez une nouvelle maintenance pour commencer.
+            </p>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          className="w-full mt-4"
+          onClick={() => navigate("/maintenance")}
+        >
+          Voir toutes les maintenances
         </Button>
       </CardContent>
     </Card>
@@ -467,36 +696,40 @@ const QuickActionButton = ({
   icon: React.ReactNode;
   label: string;
 }) => (
-  <Button variant="outline" className="h-28 flex-col gap-2" onClick={onClick}>
-    {icon}
-    <span className="text-sm font-medium text-center">{label}</span>
-  </Button>
+  <button
+    onClick={onClick}
+    className="flex flex-col items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-200 group"
+  >
+    <div className="p-3 rounded-full bg-gray-100 group-hover:bg-gray-200 transition-colors">
+      {icon}
+    </div>
+    <span className="text-sm font-medium text-gray-700 text-center">{label}</span>
+  </button>
 );
+
 const HeaderSkeleton = () => (
-  <header className="flex justify-between items-center">
-    <div className="space-y-2">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-5 w-72" />
+  <div className="space-y-4">
+    <Skeleton className="h-12 w-96" />
+    <Skeleton className="h-6 w-64" />
+    <div className="flex gap-4">
+      <Skeleton className="h-8 w-32" />
+      <Skeleton className="h-8 w-32" />
     </div>
-    <div className="flex gap-3">
-      <Skeleton className="h-10 w-28" />
-      <Skeleton className="h-10 w-44" />
-    </div>
-  </header>
+  </div>
 );
+
 const DashboardSkeleton = () => (
-  <div className="space-y-8 animate-pulse">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-      <Skeleton className="h-24" />
-      <Skeleton className="h-24" />
-      <Skeleton className="h-24" />
-      <Skeleton className="h-24" />
+  <div className="space-y-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-32" />
+      ))}
     </div>
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-      <Skeleton className="h-80" />
-      <Skeleton className="h-80" />
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="h-96" />
+      ))}
     </div>
-    <Skeleton className="h-48" />
   </div>
 );
 

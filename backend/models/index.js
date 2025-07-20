@@ -24,6 +24,7 @@ const Intervention = require("./Intervention")(sequelize, DataTypes);
 const Report = require("./Report")(sequelize, DataTypes);
 const FileAttachment = require("./FileAttachment")(sequelize, DataTypes);
 const AuditLog = require("./AuditLog")(sequelize, DataTypes);
+const MaintenanceSchedule = require("./MaintenanceSchedule")(sequelize, DataTypes);
 
 // Associations
 
@@ -75,6 +76,12 @@ Machine.hasMany(Intervention, {
 Machine.hasMany(Report, {
   foreignKey: "machine_id",
   as: "reports",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Machine.hasMany(MaintenanceSchedule, {
+  foreignKey: "machine_id",
+  as: "maintenanceSchedules",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
@@ -131,6 +138,32 @@ Report.hasMany(FileAttachment, {
   onUpdate: "CASCADE",
 });
 
+// Maintenance Schedules
+MaintenanceSchedule.belongsTo(Machine, {
+  foreignKey: "machine_id",
+  as: "machine",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+MaintenanceSchedule.belongsTo(User, {
+  foreignKey: "technician_id",
+  as: "technician",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+MaintenanceSchedule.belongsTo(User, {
+  foreignKey: "completed_by",
+  as: "completedByUser",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+MaintenanceSchedule.hasMany(FileAttachment, {
+  foreignKey: "maintenance_schedule_id",
+  as: "attachments",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
 // File Attachments
 FileAttachment.belongsTo(Intervention, {
   foreignKey: "intervention_id",
@@ -141,6 +174,12 @@ FileAttachment.belongsTo(Intervention, {
 FileAttachment.belongsTo(Report, {
   foreignKey: "report_id",
   as: "report",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+FileAttachment.belongsTo(MaintenanceSchedule, {
+  foreignKey: "maintenance_schedule_id",
+  as: "maintenanceSchedule",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
@@ -169,6 +208,7 @@ const db = {
   Report,
   FileAttachment,
   AuditLog,
+  MaintenanceSchedule,
 };
 
 module.exports = db;

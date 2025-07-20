@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   Wrench,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,6 +65,7 @@ const Sidebar = ({
     { name: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
     { name: "Rapports", href: "/reports", icon: FileText },
     { name: "Machines", href: "/machines", icon: Building2 },
+    { name: "Maintenances", href: "/maintenance", icon: Calendar },
     ...(user?.role === "admin"
       ? [{ name: "Utilisateurs", href: "/users", icon: Users }]
       : []),
