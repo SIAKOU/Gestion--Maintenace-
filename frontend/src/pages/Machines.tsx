@@ -403,7 +403,7 @@ const Machines = () => {
       {/* Machines Grid */}
       <div>
         {isLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
             <MachineCardSkeleton />
             <MachineCardSkeleton />
           </div>
@@ -412,16 +412,15 @@ const Machines = () => {
             <Terminal className="h-4 w-4" />
             <AlertTitle>Erreur</AlertTitle>
             <AlertDescription>
-              Impossible de charger la liste des machines.{" "}
-              {(error as Error).message}
+              Impossible de charger la liste des machines. { (error as Error).message }
             </AlertDescription>
           </Alert>
         ) : machines.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 overflow-x-auto">
             {machines.map((machine) => (
               <Card key={machine.id}>
                 <CardHeader>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <Avatar className="h-12 w-12">
                       <AvatarImage src={machine.image} />
                       <AvatarFallback>{machine.name?.[0] || "?"}</AvatarFallback>
@@ -434,12 +433,16 @@ const Machines = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-2">
-                    <div>Statut : {machine.status}</div>
-                    <div>Localisation : {machine.location}</div>
-                    <div>Département : {machine.department}</div>
-                    <Button variant="outline" size="sm" onClick={() => handleShowDetails(machine)}>
-                      Voir détails
-                    </Button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <div>Statut : {machine.status}</div>
+                      <div>Localisation : {machine.location}</div>
+                      <div>Département : {machine.department}</div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                      <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => handleShowDetails(machine)}>
+                        Voir détails
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

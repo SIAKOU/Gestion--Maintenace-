@@ -120,7 +120,41 @@ const createMachine = async (req, res) => {
   }
 };
 
+const deleteMachine = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const machine = await Machine.findByPk(id);
+    if (!machine) return res.status(404).json({ error: "Machine non trouvée" });
+    // Supprimer tous les fichiers associés
+    const attachments = await FileAttachment.findAll({ where: { machineId: machine.id } });
+    for (const attachment of attachments) {
+      if (attachment.path && require('fs').existsSync(attachment.path)) {
+        try { require('fs').unlinkSync(attachment.path); } catch (e) { /* ignorer */ }
+      }
+      await attachment.destroy();
+    }
+    await machine.destroy();
+    // Log d’audit
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        action: "DELETE",
+        entity: "Machine",
+        entityId: machine.id,
+        details: `Machine supprimée: ${machine.name} (${machine.reference})`,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      });
+    } catch (auditError) { logger.warn("Erreur log audit suppression machine:", auditError); }
+    res.json({ message: "Machine et fichiers associés supprimés" });
+  } catch (error) {
+    logger.error("Erreur suppression machine:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+};
+
 module.exports = {
   getMachines,
   createMachine,
+  deleteMachine,
 };

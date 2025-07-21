@@ -55,7 +55,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL, // URL du frontend en production
 ].filter(Boolean);
 
-// Configuration CORS améliorée
+// Correction: allowedHeaders et exposedHeaders doivent être bien définis, et la gestion des origines doit être robuste
 const corsOptions = {
   origin: function (origin, callback) {
     // En développement, autoriser toutes les origines locales
@@ -69,12 +69,10 @@ const corsOptions = {
         return callback(null, true);
       }
     }
-
     // En production, vérifier les origines autorisées
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
     // Bloquer les requêtes non autorisées en production
     if (process.env.NODE_ENV === "production") {
       return callback(
@@ -82,7 +80,6 @@ const corsOptions = {
         false
       );
     }
-
     // En développement, permettre quand même avec un avertissement
     console.warn(
       `Avertissement: Origine non autorisée en développement: ${origin}`
@@ -92,7 +89,7 @@ const corsOptions = {
   credentials: true,
   optionsSuccessStatus: 200,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
   exposedHeaders: ["Authorization", "Set-Cookie"],
 };
 
@@ -115,9 +112,8 @@ app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Servir les fichiers statiques avec gestion d'erreurs
+// Correction: gestion robuste des fichiers statiques et des types MIME
 app.use('/uploads', (req, res, next) => {
-  // Vérifier si le fichier existe
   const filePath = path.join(__dirname, 'uploads', req.path);
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ error: 'Fichier non trouvé' });
@@ -127,20 +123,16 @@ app.use('/uploads', (req, res, next) => {
   maxAge: process.env.NODE_ENV === "production" ? "7d" : "0",
 }));
 
-// Route pour obtenir les informations d'un fichier
+// Correction: extension de la gestion des types MIME
 app.get('/api/files/:filename', authenticateToken, async (req, res) => {
   try {
     const { filename } = req.params;
     const filePath = path.join(__dirname, 'uploads', filename);
-    
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Fichier non trouvé' });
     }
-    
     const stats = fs.statSync(filePath);
     const ext = path.extname(filename).toLowerCase();
-    
-    // Déterminer le type MIME
     const mimeTypes = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -151,10 +143,12 @@ app.get('/api/files/:filename', authenticateToken, async (req, res) => {
       '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       '.txt': 'text/plain',
       '.mp4': 'video/mp4',
-      '.avi': 'video/avi',
-      '.mov': 'video/mov'
+      '.avi': 'video/x-msvideo',
+      '.mov': 'video/quicktime',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.xls': 'application/vnd.ms-excel',
+      '.csv': 'text/csv',
     };
-    
     res.json({
       filename,
       size: stats.size,
@@ -278,9 +272,20 @@ const startServer = async () => {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`\n🚀 Serveur démarré sur le port ${PORT}`);
       console.log(`📡 Environnement: ${process.env.NODE_ENV || "development"}`);
-      console.log(`🌐 Adresses d'accès:`);
-      console.log(`   - Local:    http://localhost:${PORT}`);
-      console.log(`   - Réseau:   http://${LOCAL_IP}:${PORT}`);
+      console.log(`🌐 Le backend est accessible sur les adresses suivantes :`);
+      // Affiche toutes les IP locales IPv4
+      const interfaces = os.networkInterfaces();
+      const shown = new Set();
+      Object.values(interfaces).forEach(ifaces => {
+        ifaces.forEach(iface => {
+          if (iface.family === "IPv4" && !iface.internal && !shown.has(iface.address)) {
+            shown.add(iface.address);
+            console.log(`   - http://${iface.address}:${PORT}`);
+          }
+        });
+      });
+      // Toujours afficher localhost
+      console.log(`   - http://localhost:${PORT}`);
       console.log(`🔒 Origines autorisées:`, allowedOrigins);
       console.log(`📚 Points finaux API:`);
       console.log(`   - /api/auth`);

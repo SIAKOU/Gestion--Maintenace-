@@ -395,7 +395,7 @@ const Settings = () => {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card className="border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm">
             <CardHeader>
@@ -482,10 +482,10 @@ const Settings = () => {
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button
                   onClick={saveProfile}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                 >
                   Sauvegarder les modifications
                 </Button>
@@ -545,10 +545,10 @@ const Settings = () => {
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-col sm:flex-row justify-end gap-2">
                 <Button
                   onClick={changePassword}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                 >
                   Modifier le mot de passe
                 </Button>
@@ -583,7 +583,7 @@ const Settings = () => {
               }).map(([key, label], index) => (
                 <React.Fragment key={key}>
                   {index > 0 && <Separator />}
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                     <div className="space-y-0.5">
                       <Label htmlFor={`${key}Notifications`}>{label}</Label>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -618,7 +618,7 @@ const Settings = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2 mb-2">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-2 mb-2">
                 <Button type="button" variant="outline" onClick={handleExportPDF}>Export PDF</Button>
                 <Button type="button" variant="outline" onClick={handleExportExcel}>Export Excel</Button>
                 <Button type="button" variant="outline" onClick={handleExportCSV}>Export CSV</Button>

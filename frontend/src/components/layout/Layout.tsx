@@ -28,17 +28,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-100">
-      {/* Sidebar (fixe sur desktop, coulissante sur mobile) */}
+      {/* Sidebar (fixe sur desktop, coulissante sur mobile/tablette) */}
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Contenu principal qui aura le défilement */}
       <div className="flex flex-col w-0 flex-1 overflow-hidden">
-        {/* Header visible uniquement sur mobile */}
+        {/* Header visible uniquement sur mobile/tablette */}
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         <main className="flex-1 relative z-0 overflow-y-auto focus:outline-none">
           {/* Le padding est maintenant ici pour englober toute la zone de défilement */}
-          <div className="py-6 px-4 sm:px-6 lg:px-8">
+          <div className="py-4 px-2 sm:px-4 md:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">{children}</div>
           </div>
         </main>
@@ -82,9 +82,9 @@ const Sidebar = ({
 
   return (
     <>
-      {/* Overlay pour mobile */}
+      {/* Overlay pour mobile/tablette */}
       <div
-        className={`fixed inset-0 z-30 bg-black/50 lg:hidden ${
+        className={`fixed inset-0 z-40 bg-black/50 md:hidden ${
           sidebarOpen ? "block" : "hidden"
         }`}
         onClick={() => setSidebarOpen(false)}
@@ -93,9 +93,12 @@ const Sidebar = ({
 
       {/* Contenu de la Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col
+        aria-label="Menu latéral de navigation"
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:translate-x-0 lg:static lg:inset-0`}
+        md:translate-x-0 md:static md:inset-0
+        h-full overflow-y-auto focus:outline-none`}
+        tabIndex={-1}
       >
         <SidebarHeader />
         <UserInfo user={user} />
@@ -222,10 +225,11 @@ const LogoutButton = ({ onLogout }: { onLogout: () => void }) => (
 );
 
 const MobileHeader = ({ onMenuClick }: { onMenuClick: () => void }) => (
-  <div className="relative z-10 flex-shrink-0 flex h-16 bg-white shadow lg:hidden">
+  <div className="relative z-20 flex-shrink-0 flex h-16 bg-white shadow md:hidden">
     <button
       onClick={onMenuClick}
       className="px-4 border-r border-gray-200 text-gray-500 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+      aria-label="Ouvrir la navigation latérale"
     >
       <span className="sr-only">Ouvrir la sidebar</span>
       <Menu className="h-6 w-6" />

@@ -299,11 +299,11 @@ const Users = () => {
       </Card>
 
       {/* Users List */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 overflow-x-auto">
         {filteredUsers.map((user) => (
           <Card key={user.id}>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-12 w-12">
                     <AvatarImage 
@@ -322,7 +322,7 @@ const Users = () => {
                     <CardDescription>{user.email}</CardDescription>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                   {!user.isActive && (
                     <Badge
                       variant="outline"
@@ -342,7 +342,7 @@ const Users = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-500">Téléphone:</span>
                     <p className="font-medium">
@@ -364,16 +364,18 @@ const Users = () => {
                     </p>
                   </div>
                 )}
-                <div className="flex justify-end space-x-2 pt-2">
+                <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
                   <Button
                     variant="outline"
                     size="sm"
+                    className="w-full sm:w-auto"
                     onClick={() => handleEditUser(user)}
                   >
                     Modifier
                   </Button>
                   <Button
                     size="sm"
+                    className="w-full sm:w-auto"
                     variant={user.isActive ? "destructive" : "default"}
                     onClick={() => handleToggleUserStatus(user.id)}
                   >
@@ -381,6 +383,7 @@ const Users = () => {
                   </Button>
                   <Button
                     size="sm"
+                    className="w-full sm:w-auto"
                     variant="destructive"
                     onClick={() => handleDeleteUser(user.id)}
                   >

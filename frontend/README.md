@@ -69,13 +69,7 @@ npm run dev
 
 Le frontend sera accessible sur : `http://localhost:5173`
 
-## 👥 Comptes de Démonstration
 
-| Rôle | Email | Mot de passe | Permissions |
-|------|-------|--------------|-------------|
-| **Administrateur** | admin@maintenance.com | admin123 | Accès complet, gestion utilisateurs |
-| **Technicien** | tech@maintenance.com | tech123 | Rapports, interventions |
-| **Administration** | admin.user@maintenance.com | admin123 | Lecture, validation rapports |
 
 ## 🎯 Fonctionnalités Principales
 

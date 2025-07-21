@@ -6,7 +6,8 @@ const {
   getReports,
   getReport,
   updateReport,
-  submitReport
+  submitReport,
+  deleteReport
 } = require('../controllers/reportController');
 const { uploadReportFiles, processUploadedFiles } = require('../middleware/upload');
 
@@ -20,5 +21,6 @@ router.get('/', getReports);
 router.get('/:id', getReport);
 router.put('/:id', updateReport);
 router.patch('/:id/submit', authorize('technician'), submitReport);
+router.delete('/:id', authorize('admin', 'technician'), deleteReport);
 
 module.exports = router;

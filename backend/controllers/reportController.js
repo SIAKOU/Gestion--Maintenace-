@@ -239,10 +239,44 @@ const submitReport = async (req, res) => {
   }
 };
 
+const deleteReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const report = await Report.findByPk(id);
+    if (!report) return res.status(404).json({ error: "Rapport non trouvé" });
+    // Supprimer tous les fichiers associés
+    const attachments = await FileAttachment.findAll({ where: { reportId: report.id } });
+    for (const attachment of attachments) {
+      if (attachment.path && require('fs').existsSync(attachment.path)) {
+        try { require('fs').unlinkSync(attachment.path); } catch (e) { /* ignorer */ }
+      }
+      await attachment.destroy();
+    }
+    await report.destroy();
+    // Log d’audit
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        action: "DELETE",
+        entity: "Report",
+        entityId: report.id,
+        details: `Rapport supprimé: ${report.title}`,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      });
+    } catch (auditError) { logger.warn("Erreur log audit suppression rapport:", auditError); }
+    res.json({ message: "Rapport et fichiers associés supprimés" });
+  } catch (error) {
+    logger.error("Erreur suppression rapport:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+};
+
 module.exports = {
   createReport,
   getReports,
   getReport,
   updateReport,
-  submitReport
+  submitReport,
+  deleteReport
 };

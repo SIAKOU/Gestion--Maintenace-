@@ -284,7 +284,7 @@ const Reports = () => {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <Checkbox
             id="selectAll"
             checked={isAllSelected}
@@ -294,31 +294,37 @@ const Reports = () => {
             Tout sélectionner ({reports.length})
           </Label>
         </div>
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => (
-            <ReportCardSkeleton key={i} />
-          ))
-        ) : error ? (
-          <Alert variant="destructive">
-            <Terminal className="h-4 w-4" />
-            <AlertTitle>Erreur</AlertTitle>
-            <AlertDescription>
-              Impossible de charger les rapports.
-            </AlertDescription>
-          </Alert>
-        ) : reports.length > 0 ? (
-          reports.map((report) => (
-            <ReportCard
-              key={report.id}
-              report={report}
-              isSelected={selectedReports.has(report.id)}
-              onSelect={handleSelectReport}
-              onEdit={() => handleEditReport(report)}
-            />
-          ))
-        ) : (
-          <EmptyState />
-        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 overflow-x-auto">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <ReportCardSkeleton key={i} />
+            ))
+          ) : error ? (
+            <div className="col-span-full">
+              <Alert variant="destructive">
+                <Terminal className="h-4 w-4" />
+                <AlertTitle>Erreur</AlertTitle>
+                <AlertDescription>
+                  Impossible de charger les rapports.
+                </AlertDescription>
+              </Alert>
+            </div>
+          ) : reports.length > 0 ? (
+            reports.map((report) => (
+              <ReportCard
+                key={report.id}
+                report={report}
+                isSelected={selectedReports.has(report.id)}
+                onSelect={handleSelectReport}
+                onEdit={() => handleEditReport(report)}
+              />
+            ))
+          ) : (
+            <div className="col-span-full">
+              <EmptyState />
+            </div>
+          )}
+        </div>
       </div>
 
       {selectedReports.size > 0 && (
@@ -680,7 +686,7 @@ const ReportCard = ({
         isSelected ? "border-blue-500 shadow-md bg-blue-50/50" : ""
       }`}
     >
-      <CardHeader className="flex flex-row items-start gap-4 space-y-0 p-4">
+      <CardHeader className="flex flex-col sm:flex-row items-start gap-4 space-y-0 p-4">
         <Checkbox
           checked={isSelected}
           onCheckedChange={(checked) => onSelect(report.id, !!checked)}
@@ -689,11 +695,11 @@ const ReportCard = ({
         <div className="flex-1">
           <CardTitle>{report.title}</CardTitle>
           <CardDescription>
-            Machine: {report.machine.name} | Technicien:{" "}
+            Machine: {report.machine.name} | Technicien: {" "}
             {report.technician.firstName} {report.technician.lastName}
           </CardDescription>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
           <Badge className={getPriorityColor(report.priority)}>
             {report.priority}
           </Badge>
@@ -703,7 +709,7 @@ const ReportCard = ({
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
-        <div className="border-t pt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+        <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-gray-400" />
             <span>{new Date(report.workDate).toLocaleDateString()}</span>
@@ -717,7 +723,7 @@ const ReportCard = ({
             <span>{report.workType}</span>
           </div>
           <div className="flex justify-end">
-            <Button variant="outline" size="sm" onClick={onEdit}>
+            <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={onEdit}>
               Modifier
             </Button>
           </div>

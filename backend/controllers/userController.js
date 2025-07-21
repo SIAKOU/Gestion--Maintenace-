@@ -320,10 +320,52 @@ const deleteAvatar = async (req, res) => {
   }
 };
 
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ error: "Utilisateur non trouvé" });
+
+    // Supprimer tous les avatars et fichiers associés
+    const attachments = await FileAttachment.findAll({ where: { userId: user.id } });
+    for (const attachment of attachments) {
+      if (attachment.path && fs.existsSync(attachment.path)) {
+        try { fs.unlinkSync(attachment.path); } catch (e) { /* ignorer */ }
+      }
+      await attachment.destroy();
+    }
+    // Supprimer l’avatar direct si présent (sécurité)
+    if (user.avatar) {
+      const avatarPath = user.avatar.startsWith('/') ? user.avatar : path.join(__dirname, '..', user.avatar);
+      if (fs.existsSync(avatarPath)) {
+        try { fs.unlinkSync(avatarPath); } catch (e) { /* ignorer */ }
+      }
+    }
+    await user.destroy();
+    // Log d’audit
+    try {
+      await AuditLog.create({
+        userId: req.user.id,
+        action: "DELETE",
+        entity: "User",
+        entityId: user.id,
+        details: `Utilisateur supprimé: ${user.email}`,
+        ipAddress: req.ip,
+        userAgent: req.get("User-Agent"),
+      });
+    } catch (auditError) { logger.warn("Erreur log audit suppression:", auditError); }
+    res.json({ message: "Utilisateur et fichiers associés supprimés" });
+  } catch (error) {
+    logger.error("Erreur suppression utilisateur:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+};
+
 module.exports = {
   getAllUsers,
   createUser,
   updateUser,
   toggleUserStatus,
   deleteAvatar,
+  deleteUser,
 };

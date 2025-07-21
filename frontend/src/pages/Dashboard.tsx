@@ -201,7 +201,7 @@ const Dashboard = () => {
   return (
     <div className="space-y-8">
       {/* En-tête amélioré */}
-      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div className="flex-1">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             {getGreeting()}, {user?.firstName || "Utilisateur"} 👋
@@ -209,7 +209,7 @@ const Dashboard = () => {
           <p className="text-lg text-gray-600">
             Voici un aperçu complet de votre activité maintenance.
           </p>
-          <div className="flex items-center gap-4 mt-3">
+          <div className="flex flex-wrap items-center gap-4 mt-3">
             <Badge variant="outline" className="text-sm">
               <Activity className="w-3 h-3 mr-1" />
               {safeData.stats.efficiencyScore}% d'efficacité
@@ -220,7 +220,7 @@ const Dashboard = () => {
             </Badge>
           </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
+        <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
           <Button
             variant="outline"
             className="w-full sm:w-auto"
@@ -261,7 +261,7 @@ const Dashboard = () => {
 // --- SOUS-COMPOSANTS AMÉLIORÉS ---
 
 const StatsSection = ({ stats }: { stats: DashboardData["stats"] }) => (
-  <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+  <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
     <StatCard
       title="Interventions Aujourd'hui"
       value={stats.interventionsToday}
@@ -345,7 +345,7 @@ const MainContentSection = ({
   upcomingMaintenance: Machine[];
   maintenanceSchedules: any[];
 }) => (
-  <section className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+  <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-8">
     <RecentInterventionsCard interventions={recentInterventions} />
     <UpcomingMaintenanceCard maintenances={upcomingMaintenance} />
     <MaintenanceSchedulesCard schedules={maintenanceSchedules} />
@@ -366,7 +366,7 @@ const QuickActionsSection = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <QuickActionButton
             onClick={() => navigate("/reports")}
             icon={<Wrench className="h-7 w-7 text-blue-600" />}
